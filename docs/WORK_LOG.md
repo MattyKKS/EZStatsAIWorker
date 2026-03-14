@@ -32,6 +32,7 @@
 - Player crop export for the next appearance-model stage.
 - Final video rendering now uses the cleaned post-processed tracks instead of raw YOLO overlays.
 - Ball cleanup now supports trajectory-based re-acquisition and frame dropping for ambiguous multi-ball detections.
+- Ball source merging now keeps the dedicated ball pass as primary but falls back to tracked-stream ball detections on frames where the dedicated pass misses.
 
 ### Changed
 
@@ -50,6 +51,7 @@
   - drop multi-ball frames
   - keep the candidate that best matches the recent trajectory
   - allow controlled high-confidence re-acquisition after longer gaps
+- Ball continuity now uses a conservative fallback path instead of fully discarding tracked-stream ball hints.
 
 ### Removed
 

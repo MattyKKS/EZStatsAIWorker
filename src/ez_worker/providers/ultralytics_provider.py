@@ -177,11 +177,16 @@ class UltralyticsTrackingProvider(TrackingProvider):
         model_label_map: dict[int, str],
     ) -> list[TrackObservation]:
         player_tracks = [track for track in tracks if track.label != "ball"]
-        ball_tracks = self._run_dedicated_ball_pass(
+        tracked_ball_tracks = [track.model_copy(update={"track_id": 0}) for track in tracks if track.label == "ball"]
+        dedicated_ball_tracks = self._run_dedicated_ball_pass(
             model=model,
             video=video,
             config=config,
             model_label_map=model_label_map,
+        )
+        ball_tracks = self._merge_ball_sources(
+            tracked_ball_tracks=tracked_ball_tracks,
+            dedicated_ball_tracks=dedicated_ball_tracks,
         )
         return player_tracks + ball_tracks
 
@@ -240,6 +245,24 @@ class UltralyticsTrackingProvider(TrackingProvider):
             cap.release()
 
         return ball_tracks
+
+    def _merge_ball_sources(
+        self,
+        *,
+        tracked_ball_tracks: list[TrackObservation],
+        dedicated_ball_tracks: list[TrackObservation],
+    ) -> list[TrackObservation]:
+        merged_by_frame: dict[int, TrackObservation] = {}
+
+        for track in tracked_ball_tracks:
+            current = merged_by_frame.get(track.frame_index)
+            if current is None or track.confidence > current.confidence:
+                merged_by_frame[track.frame_index] = track
+
+        for track in dedicated_ball_tracks:
+            merged_by_frame[track.frame_index] = track
+
+        return [merged_by_frame[frame_index] for frame_index in sorted(merged_by_frame)]
 
 
 def _bbox_area_fraction(bbox: BBox) -> float:
