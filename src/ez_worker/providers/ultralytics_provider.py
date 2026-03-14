@@ -1,0 +1,267 @@
+from __future__ import annotations
+
+from collections import Counter
+from pathlib import Path
+
+import cv2
+
+from ez_worker.config import PipelineConfig
+from ez_worker.providers.base import ProviderArtifacts, TrackingProvider
+from ez_worker.schemas import BBox, TrackObservation, VideoMeta
+
+
+class UltralyticsTrackingProvider(TrackingProvider):
+    """Football-oriented provider using one tracked stream with separate ball handling per frame."""
+
+    def run(
+        self,
+        video: VideoMeta,
+        config: PipelineConfig,
+        output_dir: Path,
+    ) -> ProviderArtifacts:
+        try:
+            from ultralytics import YOLO
+        except ImportError as exc:
+            raise RuntimeError(
+                "Ultralytics is not installed. Run 'pip install -e .[ml]' before using "
+                "the ultralytics provider."
+            ) from exc
+
+        model = YOLO(config.model_name)
+        model_info = self._build_model_info(model)
+        rendered_video_path = output_dir / "processed_video.mp4"
+        video_writer = self._build_video_writer(rendered_video_path, video) if config.render_video else None
+        results = model.track(
+            source=str(video.path),
+            stream=True,
+            conf=config.detection_confidence,
+            iou=config.detection_iou,
+            tracker=config.tracker_config,
+            persist=True,
+            vid_stride=config.frame_step,
+            verbose=False,
+        )
+
+        tracks: list[TrackObservation] = []
+        try:
+            for result_index, result in enumerate(results):
+                source_frame_index = result_index * config.frame_step
+                frame_tracks = self._result_to_tracks(
+                    result,
+                    source_frame_index,
+                    video,
+                    model_info["label_map"],
+                )
+                frame_tracks = self._normalize_frame_tracks(frame_tracks, config)
+                tracks.extend(frame_tracks)
+
+                if video_writer is not None:
+                    plotted_frame = result.plot()
+                    video_writer.write(plotted_frame)
+        finally:
+            if video_writer is not None:
+                video_writer.release()
+
+        if config.dedicated_ball_pass:
+            tracks = self._replace_ball_tracks_with_dedicated_pass(
+                model=model,
+                tracks=tracks,
+                video=video,
+                config=config,
+                model_label_map=model_info["label_map"],
+            )
+
+        tracks = self._filter_tracks(tracks, config)
+        processed_video_path = rendered_video_path if rendered_video_path.exists() else None
+        return ProviderArtifacts(tracks=tracks, processed_video_path=processed_video_path)
+
+    def _result_to_tracks(
+        self,
+        result,
+        frame_index: int,
+        video: VideoMeta,
+        model_label_map: dict[int, str],
+    ) -> list[TrackObservation]:
+        boxes = getattr(result, "boxes", None)
+        if boxes is None or boxes.xyxy is None:
+            return []
+
+        class_ids = boxes.cls.int().cpu().tolist() if boxes.cls is not None else []
+        confidences = boxes.conf.cpu().tolist() if boxes.conf is not None else []
+        xyxy_values = boxes.xyxy.cpu().tolist()
+        track_ids = (
+            boxes.id.int().cpu().tolist()
+            if getattr(boxes, "id", None) is not None
+            else list(range(len(xyxy_values)))
+        )
+
+        observations: list[TrackObservation] = []
+        for xyxy, track_id, class_id, confidence in zip(
+            xyxy_values, track_ids, class_ids, confidences, strict=False
+        ):
+            label = model_label_map.get(class_id)
+            if label is None:
+                continue
+
+            x1, y1, x2, y2 = xyxy
+            observations.append(
+                TrackObservation(
+                    frame_index=frame_index,
+                    track_id=int(track_id),
+                    label=label,
+                    confidence=float(confidence),
+                    bbox=BBox(
+                        x1=max(0.0, min(1.0, x1 / video.width)),
+                        y1=max(0.0, min(1.0, y1 / video.height)),
+                        x2=max(0.0, min(1.0, x2 / video.width)),
+                        y2=max(0.0, min(1.0, y2 / video.height)),
+                    ),
+                )
+            )
+        return observations
+
+    def _normalize_frame_tracks(
+        self,
+        tracks: list[TrackObservation],
+        config: PipelineConfig,
+    ) -> list[TrackObservation]:
+        players = [
+            track
+            for track in tracks
+            if track.label == "player" and track.confidence >= config.min_player_confidence
+        ]
+        balls = [
+            track
+            for track in tracks
+            if track.label == "ball" and track.confidence >= config.min_ball_confidence
+        ]
+        if balls:
+            balls.sort(key=lambda track: track.confidence, reverse=True)
+            balls = [balls[0].model_copy(update={"track_id": 0})]
+        return players + balls
+
+    def _build_model_info(self, model) -> dict[str, object]:
+        names = getattr(model.model, "names", None) or {}
+        normalized = {int(idx): str(name).strip().lower() for idx, name in names.items()}
+
+        mapped: dict[int, str] = {}
+        for class_id, name in normalized.items():
+            if name in {"person", "player", "goalkeeper", "referee"}:
+                mapped[class_id] = "player"
+            elif name in {"sports ball", "ball"}:
+                mapped[class_id] = "ball"
+        return {
+            "label_map": mapped,
+        }
+
+    def _filter_tracks(
+        self,
+        tracks: list[TrackObservation],
+        config: PipelineConfig,
+    ) -> list[TrackObservation]:
+        filtered: list[TrackObservation] = []
+        for track in tracks:
+            if track.label == "player":
+                if track.confidence < config.min_player_confidence:
+                    continue
+                if _bbox_area_fraction(track.bbox) > config.max_player_box_area_fraction:
+                    continue
+            elif track.label == "ball":
+                if track.confidence < config.min_ball_confidence:
+                    continue
+            filtered.append(track)
+
+        counts = Counter((track.label, track.track_id) for track in filtered)
+        return [
+            track
+            for track in filtered
+            if track.label == "ball" or counts[(track.label, track.track_id)] >= config.min_track_length
+        ]
+
+    def _replace_ball_tracks_with_dedicated_pass(
+        self,
+        *,
+        model,
+        tracks: list[TrackObservation],
+        video: VideoMeta,
+        config: PipelineConfig,
+        model_label_map: dict[int, str],
+    ) -> list[TrackObservation]:
+        player_tracks = [track for track in tracks if track.label != "ball"]
+        ball_tracks = self._run_dedicated_ball_pass(
+            model=model,
+            video=video,
+            config=config,
+            model_label_map=model_label_map,
+        )
+        return player_tracks + ball_tracks
+
+    def _run_dedicated_ball_pass(
+        self,
+        *,
+        model,
+        video: VideoMeta,
+        config: PipelineConfig,
+        model_label_map: dict[int, str],
+    ) -> list[TrackObservation]:
+        cap = cv2.VideoCapture(str(video.path))
+        if not cap.isOpened():
+            raise RuntimeError(f"Unable to open video for dedicated ball pass: {video.path}")
+
+        class_ids = [idx for idx, label in model_label_map.items() if label == "ball"]
+        if not class_ids:
+            cap.release()
+            return []
+
+        ball_tracks: list[TrackObservation] = []
+        frame_index = 0
+        try:
+            while True:
+                ok, frame = cap.read()
+                if not ok:
+                    break
+                if frame_index % config.frame_step != 0:
+                    frame_index += 1
+                    continue
+
+                results = model.predict(
+                    source=frame,
+                    conf=min(config.detection_confidence, config.min_ball_confidence),
+                    iou=config.detection_iou,
+                    imgsz=config.ball_detection_imgsz,
+                    verbose=False,
+                    classes=class_ids,
+                )
+                if results:
+                    frame_tracks = self._result_to_tracks(
+                        results[0],
+                        frame_index,
+                        video,
+                        model_label_map,
+                    )
+                    balls = [track for track in frame_tracks if track.label == "ball"]
+                    if balls:
+                        balls.sort(key=lambda track: track.confidence, reverse=True)
+                        ball_tracks.append(balls[0].model_copy(update={"track_id": 0}))
+                frame_index += 1
+        finally:
+            cap.release()
+
+        return ball_tracks
+
+    def _build_video_writer(self, output_path: Path, video: VideoMeta) -> cv2.VideoWriter:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        writer = cv2.VideoWriter(
+            str(output_path),
+            fourcc,
+            video.fps,
+            (video.width, video.height),
+        )
+        if not writer.isOpened():
+            raise RuntimeError(f"Unable to create rendered video at: {output_path}")
+        return writer
+
+
+def _bbox_area_fraction(bbox: BBox) -> float:
+    return max(0.0, bbox.x2 - bbox.x1) * max(0.0, bbox.y2 - bbox.y1)

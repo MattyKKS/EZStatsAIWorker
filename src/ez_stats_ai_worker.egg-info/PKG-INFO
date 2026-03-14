@@ -1,0 +1,140 @@
+Metadata-Version: 2.4
+Name: ez-stats-ai-worker
+Version: 0.1.0
+Summary: Football AI worker for detection, tracking, events, and stats.
+Requires-Python: <3.13,>=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: pydantic<3.0,>=2.10
+Requires-Dist: pyyaml<7.0,>=6.0
+Requires-Dist: numpy<3.0,>=1.26
+Provides-Extra: dev
+Requires-Dist: pytest<9.0,>=8.3; extra == "dev"
+Requires-Dist: ruff<0.12,>=0.11; extra == "dev"
+Provides-Extra: cv
+Requires-Dist: opencv-python<5.0,>=4.10; extra == "cv"
+Provides-Extra: ml
+Requires-Dist: ultralytics<9.0,>=8.3; extra == "ml"
+Requires-Dist: supervision<0.26,>=0.25; extra == "ml"
+
+# EZ Stats AI Worker
+
+AI-worker-first football analytics project. The goal is to run the full offline pipeline on a laptop or cloud notebook before any frontend/backend integration:
+
+- input a match video
+- detect and track players/ball
+- infer simple events
+- produce statistics
+- export processed assets and JSON outputs
+
+## Current status
+
+This repository now contains the first scaffold:
+
+- CLI entrypoint
+- project structure
+- config and typed schemas
+- pipeline orchestration
+- mock provider for dry runs
+- event/stat generation from track data
+- output writers
+- dataset/setup documentation
+
+The real detector/tracker models are not wired in yet. The next implementation step is replacing the mock provider with a real inference provider.
+The repository now includes a first `ultralytics` provider for real baseline detection/tracking, but it still needs the `ml` dependencies installed before you can run it.
+
+## Recommended Python version
+
+Use Python `3.11` or `3.12` for CV/ML compatibility.
+
+On this machine:
+
+- `python` points to `3.13.5`
+- `py -3.12` is available and should be used for this project
+
+## Beginner-friendly roadmap
+
+### Phase 0
+
+Set up tooling and sample data.
+
+### Phase 1
+
+Run the pipeline end to end with mock outputs so the folder structure, schemas, and export format are stable.
+
+### Phase 2
+
+Add real detection and tracking:
+
+- player detector
+- ball detector
+- tracker
+- rendered overlay video
+
+### Phase 3
+
+Add first useful football events and stats:
+
+- touches
+- carries
+- passes
+- shots
+- possession estimates
+- distance and speed summaries
+
+### Phase 4
+
+Add stronger football analytics:
+
+- team assignment
+- pitch projection
+- heatmaps
+- average positions
+- x/y trajectory features
+
+## Quick start
+
+1. Create a Python 3.12 virtual environment.
+2. Install dependencies from `pyproject.toml`.
+3. Put a sample match video in `data/raw/`.
+4. Run:
+
+```bash
+py -3.12 -m venv .venv
+.venv\Scripts\activate
+pip install -e .[dev,cv]
+ez-worker analyze --video data/raw/sample.mp4 --provider mock
+```
+
+Outputs are written under `outputs/<run_id>/`.
+
+For real baseline inference:
+
+```bash
+pip install -e .[ml]
+ez-worker analyze --video data/raw/sample.mp4 --provider ultralytics --render-video
+```
+
+## Repository layout
+
+```text
+src/ez_worker/
+  analytics/
+  io/
+  providers/
+  outputs/
+  cli.py
+  config.py
+  pipeline.py
+  schemas.py
+docs/
+  datasets.md
+```
+
+## What you need to download manually
+
+Read `docs/datasets.md`. Short version:
+
+- yes, you need to manually obtain at least one sample football video
+- SoccerNet video data requires their access process
+- Kaggle downloads can be scripted after account/API setup
+- Roboflow exports can be scripted after you choose the dataset/project

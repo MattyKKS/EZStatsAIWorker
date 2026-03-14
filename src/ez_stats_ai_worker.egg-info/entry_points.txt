@@ -1,0 +1,2 @@
+[console_scripts]
+ez-worker = ez_worker.cli:main

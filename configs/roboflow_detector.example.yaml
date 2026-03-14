@@ -1,0 +1,22 @@
+dataset_name: football_detector
+source: roboflow
+format: yolo
+task: detect
+classes:
+  - player
+  - ball
+  - referee
+train:
+  image_size: 1280
+  epochs: 80
+  batch_size: 8
+  device: auto
+inference:
+  model_name: yolov8m.pt
+  confidence: 0.35
+  iou: 0.45
+tracking:
+  tracker: bytetrack.yaml
+notes:
+  - Start with player and ball quality first.
+  - Keep ByteTrack as the tracker to match the proposal.

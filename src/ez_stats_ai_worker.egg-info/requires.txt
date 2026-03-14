@@ -1,0 +1,14 @@
+pydantic<3.0,>=2.10
+pyyaml<7.0,>=6.0
+numpy<3.0,>=1.26
+
+[cv]
+opencv-python<5.0,>=4.10
+
+[dev]
+pytest<9.0,>=8.3
+ruff<0.12,>=0.11
+
+[ml]
+ultralytics<9.0,>=8.3
+supervision<0.26,>=0.25

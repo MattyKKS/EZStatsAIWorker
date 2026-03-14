@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ez-stats-ai-worker"
+version = "0.1.0"
+description = "Football AI worker for detection, tracking, events, and stats."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+  "pydantic>=2.10,<3.0",
+  "pyyaml>=6.0,<7.0",
+  "numpy>=1.26,<3.0",
+]
+
+[project.scripts]
+ez-worker = "ez_worker.cli:main"
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9.0",
+  "ruff>=0.11,<0.12",
+]
+cv = [
+  "opencv-python>=4.10,<5.0",
+]
+ml = [
+  "ultralytics>=8.3,<9.0",
+  "supervision>=0.25,<0.26",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
