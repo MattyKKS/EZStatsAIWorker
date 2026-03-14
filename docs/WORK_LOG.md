@@ -30,6 +30,8 @@
 - Revised the previous ball-handling change to avoid dual streaming after it appeared to cause unstable runtime behavior.
 - Added a dedicated sequential ball-only pass to better match the tutorial's ball-handling approach.
 - Player crop export for the next appearance-model stage.
+- Final video rendering now uses the cleaned post-processed tracks instead of raw YOLO overlays.
+- Ball cleanup now supports trajectory-based re-acquisition and frame dropping for ambiguous multi-ball detections.
 
 ### Changed
 
@@ -43,6 +45,11 @@
 - Inference provider no longer relies on raw joint tracking of the ball.
 - Current implementation uses one tracked stream and then normalizes ball handling per frame.
 - Event generation now requires stable short possession before emitting touch/pass events.
+- Ball rendering and cleanup are now closer to the tutorial flow:
+  - detect ball separately at high resolution
+  - drop multi-ball frames
+  - keep the candidate that best matches the recent trajectory
+  - allow controlled high-confidence re-acquisition after longer gaps
 
 ### Removed
 

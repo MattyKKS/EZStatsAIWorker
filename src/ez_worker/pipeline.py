@@ -7,6 +7,7 @@ from ez_worker.analytics.events import detect_events
 from ez_worker.analytics.stats import build_track_stats
 from ez_worker.config import PipelineConfig
 from ez_worker.io.crops import export_player_crops
+from ez_worker.io.render import render_tracks_video
 from ez_worker.io.video import load_video_meta
 from ez_worker.outputs.writer import write_artifacts
 from ez_worker.postprocess.tracks import cleanup_tracks
@@ -36,6 +37,9 @@ def run_analysis(video_path: Path, config: PipelineConfig) -> Path:
         max_interpolation_gap_frames=config.max_interpolation_gap_frames,
         clean_ball_path=config.clean_ball_path,
         max_ball_jump_px=config.max_ball_jump_px,
+        ball_reset_gap_frames=config.ball_reset_gap_frames,
+        ball_reset_confidence=config.ball_reset_confidence,
+        drop_ambiguous_ball_frames=config.drop_ambiguous_ball_frames,
     )
     events = detect_events(
         tracks=tracks,
@@ -48,12 +52,22 @@ def run_analysis(video_path: Path, config: PipelineConfig) -> Path:
     )
     stats = build_track_stats(tracks=tracks, events=events, video=video)
 
+    processed_video_path = provider_artifacts.processed_video_path
+    if config.render_video:
+        processed_video_path = output_dir / "processed_video.mp4"
+        render_tracks_video(
+            video=video,
+            tracks=tracks,
+            events=events,
+            output_path=processed_video_path,
+        )
+
     artifacts = AnalysisArtifacts(
         video=video,
         tracks=tracks,
         events=events,
         stats=stats,
-        processed_video_path=provider_artifacts.processed_video_path,
+        processed_video_path=processed_video_path,
     )
     write_artifacts(artifacts, output_dir)
     if config.export_player_crops:

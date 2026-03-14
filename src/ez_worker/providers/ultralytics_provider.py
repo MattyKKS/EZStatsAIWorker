@@ -29,8 +29,6 @@ class UltralyticsTrackingProvider(TrackingProvider):
 
         model = YOLO(config.model_name)
         model_info = self._build_model_info(model)
-        rendered_video_path = output_dir / "processed_video.mp4"
-        video_writer = self._build_video_writer(rendered_video_path, video) if config.render_video else None
         results = model.track(
             source=str(video.path),
             stream=True,
@@ -43,24 +41,16 @@ class UltralyticsTrackingProvider(TrackingProvider):
         )
 
         tracks: list[TrackObservation] = []
-        try:
-            for result_index, result in enumerate(results):
-                source_frame_index = result_index * config.frame_step
-                frame_tracks = self._result_to_tracks(
-                    result,
-                    source_frame_index,
-                    video,
-                    model_info["label_map"],
-                )
-                frame_tracks = self._normalize_frame_tracks(frame_tracks, config)
-                tracks.extend(frame_tracks)
-
-                if video_writer is not None:
-                    plotted_frame = result.plot()
-                    video_writer.write(plotted_frame)
-        finally:
-            if video_writer is not None:
-                video_writer.release()
+        for result_index, result in enumerate(results):
+            source_frame_index = result_index * config.frame_step
+            frame_tracks = self._result_to_tracks(
+                result,
+                source_frame_index,
+                video,
+                model_info["label_map"],
+            )
+            frame_tracks = self._normalize_frame_tracks(frame_tracks, config)
+            tracks.extend(frame_tracks)
 
         if config.dedicated_ball_pass:
             tracks = self._replace_ball_tracks_with_dedicated_pass(
@@ -72,8 +62,7 @@ class UltralyticsTrackingProvider(TrackingProvider):
             )
 
         tracks = self._filter_tracks(tracks, config)
-        processed_video_path = rendered_video_path if rendered_video_path.exists() else None
-        return ProviderArtifacts(tracks=tracks, processed_video_path=processed_video_path)
+        return ProviderArtifacts(tracks=tracks, processed_video_path=None)
 
     def _result_to_tracks(
         self,
@@ -240,6 +229,9 @@ class UltralyticsTrackingProvider(TrackingProvider):
                         model_label_map,
                     )
                     balls = [track for track in frame_tracks if track.label == "ball"]
+                    if config.drop_ambiguous_ball_frames and len(balls) > 1:
+                        frame_index += 1
+                        continue
                     if balls:
                         balls.sort(key=lambda track: track.confidence, reverse=True)
                         ball_tracks.append(balls[0].model_copy(update={"track_id": 0}))
@@ -248,19 +240,6 @@ class UltralyticsTrackingProvider(TrackingProvider):
             cap.release()
 
         return ball_tracks
-
-    def _build_video_writer(self, output_path: Path, video: VideoMeta) -> cv2.VideoWriter:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        writer = cv2.VideoWriter(
-            str(output_path),
-            fourcc,
-            video.fps,
-            (video.width, video.height),
-        )
-        if not writer.isOpened():
-            raise RuntimeError(f"Unable to create rendered video at: {output_path}")
-        return writer
 
 
 def _bbox_area_fraction(bbox: BBox) -> float:

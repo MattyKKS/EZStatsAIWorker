@@ -20,11 +20,21 @@ def cleanup_tracks(
     max_interpolation_gap_frames: int,
     clean_ball_path: bool,
     max_ball_jump_px: float,
+    ball_reset_gap_frames: int,
+    ball_reset_confidence: float,
+    drop_ambiguous_ball_frames: bool,
 ) -> list[TrackObservation]:
     cleaned = limit_players_per_frame(tracks, max_players_per_frame=max_players_per_frame)
-    cleaned = limit_ball_per_frame(cleaned)
+    cleaned = limit_ball_per_frame(cleaned, drop_ambiguous_frames=drop_ambiguous_ball_frames)
     if clean_ball_path:
-        cleaned = clean_ball_detections(cleaned, video, max_ball_jump_px=max_ball_jump_px)
+        cleaned = clean_ball_detections(
+            cleaned,
+            video,
+            frame_step=frame_step,
+            max_ball_jump_px=max_ball_jump_px,
+            ball_reset_gap_frames=ball_reset_gap_frames,
+            ball_reset_confidence=ball_reset_confidence,
+        )
     if merge_tracklets:
         cleaned = merge_player_tracklets(
             cleaned,
@@ -66,7 +76,11 @@ def limit_players_per_frame(
     return sorted(limited, key=lambda track: (track.frame_index, track.label, track.track_id))
 
 
-def limit_ball_per_frame(tracks: list[TrackObservation]) -> list[TrackObservation]:
+def limit_ball_per_frame(
+    tracks: list[TrackObservation],
+    *,
+    drop_ambiguous_frames: bool,
+) -> list[TrackObservation]:
     by_frame: dict[int, list[TrackObservation]] = defaultdict(list)
     for track in tracks:
         by_frame[track.frame_index].append(track)
@@ -77,6 +91,9 @@ def limit_ball_per_frame(tracks: list[TrackObservation]) -> list[TrackObservatio
         balls = [track for track in frame_tracks if track.label == "ball"]
         non_balls = [track for track in frame_tracks if track.label != "ball"]
         if balls:
+            if drop_ambiguous_frames and len(balls) > 1:
+                limited.extend(non_balls)
+                continue
             balls.sort(key=lambda track: track.confidence, reverse=True)
             limited.append(balls[0])
         limited.extend(non_balls)
@@ -87,29 +104,101 @@ def clean_ball_detections(
     tracks: list[TrackObservation],
     video: VideoMeta,
     *,
+    frame_step: int,
     max_ball_jump_px: float,
+    ball_reset_gap_frames: int,
+    ball_reset_confidence: float,
 ) -> list[TrackObservation]:
     balls = [track for track in tracks if track.label == "ball"]
     non_balls = [track for track in tracks if track.label != "ball"]
     if not balls:
         return tracks
 
-    balls.sort(key=lambda track: track.frame_index)
-    cleaned_balls: list[TrackObservation] = []
-    last_ball: TrackObservation | None = None
+    balls_by_frame: dict[int, list[TrackObservation]] = defaultdict(list)
     for ball in balls:
-        normalized_ball = ball.model_copy(update={"track_id": 0})
+        balls_by_frame[ball.frame_index].append(ball.model_copy(update={"track_id": 0}))
+
+    cleaned_balls: list[TrackObservation] = []
+    previous_ball: TrackObservation | None = None
+    last_ball: TrackObservation | None = None
+    for frame_index in sorted(balls_by_frame):
+        frame_candidates = sorted(
+            balls_by_frame[frame_index],
+            key=lambda track: track.confidence,
+            reverse=True,
+        )
         if last_ball is None:
-            cleaned_balls.append(normalized_ball)
-            last_ball = normalized_ball
+            selected = frame_candidates[0]
+            cleaned_balls.append(selected)
+            last_ball = selected
             continue
 
-        jump_px = _center_distance_px(last_ball, normalized_ball, video)
-        if jump_px <= max_ball_jump_px:
-            cleaned_balls.append(normalized_ball)
-            last_ball = normalized_ball
+        gap_frames = frame_index - last_ball.frame_index
+        allowed_jump_px = max_ball_jump_px * max(1.0, gap_frames / max(frame_step, 1))
+        selected = _select_best_ball_candidate(
+            frame_candidates,
+            previous_ball=previous_ball,
+            last_ball=last_ball,
+            video=video,
+            allowed_jump_px=allowed_jump_px,
+        )
+        if selected is None:
+            if gap_frames >= ball_reset_gap_frames:
+                reset_candidate = frame_candidates[0]
+                if reset_candidate.confidence >= ball_reset_confidence:
+                    selected = reset_candidate
+                else:
+                    continue
+            else:
+                continue
+
+        cleaned_balls.append(selected)
+        previous_ball = last_ball
+        last_ball = selected
 
     return sorted(non_balls + cleaned_balls, key=lambda track: (track.frame_index, track.label, track.track_id))
+
+
+def _select_best_ball_candidate(
+    candidates: list[TrackObservation],
+    *,
+    previous_ball: TrackObservation | None,
+    last_ball: TrackObservation,
+    video: VideoMeta,
+    allowed_jump_px: float,
+) -> TrackObservation | None:
+    ranked: list[tuple[float, float, float, TrackObservation]] = []
+    predicted_cx, predicted_cy = _predict_ball_center(previous_ball, last_ball)
+    for candidate in candidates:
+        dx = (candidate.bbox.cx - predicted_cx) * video.width
+        dy = (candidate.bbox.cy - predicted_cy) * video.height
+        predicted_distance_px = (dx * dx + dy * dy) ** 0.5
+        distance_from_last_px = _center_distance_px(last_ball, candidate, video)
+        if min(predicted_distance_px, distance_from_last_px) > allowed_jump_px:
+            continue
+        ranked.append((predicted_distance_px, distance_from_last_px, -candidate.confidence, candidate))
+
+    if not ranked:
+        return None
+
+    ranked.sort(key=lambda item: (item[0], item[1], item[2]))
+    return ranked[0][3]
+
+
+def _predict_ball_center(
+    previous_ball: TrackObservation | None,
+    last_ball: TrackObservation,
+) -> tuple[float, float]:
+    if previous_ball is None:
+        return last_ball.bbox.cx, last_ball.bbox.cy
+
+    frame_delta = last_ball.frame_index - previous_ball.frame_index
+    if frame_delta <= 0:
+        return last_ball.bbox.cx, last_ball.bbox.cy
+
+    vx = (last_ball.bbox.cx - previous_ball.bbox.cx) / frame_delta
+    vy = (last_ball.bbox.cy - previous_ball.bbox.cy) / frame_delta
+    return last_ball.bbox.cx + vx, last_ball.bbox.cy + vy
 
 
 def keep_best_player_tracks(
