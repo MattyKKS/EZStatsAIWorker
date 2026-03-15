@@ -69,7 +69,7 @@ class UltralyticsTrackingProvider(TrackingProvider):
         result,
         frame_index: int,
         video: VideoMeta,
-        model_label_map: dict[int, str],
+        model_label_map: dict[int, tuple[str, str]],
     ) -> list[TrackObservation]:
         boxes = getattr(result, "boxes", None)
         if boxes is None or boxes.xyxy is None:
@@ -88,9 +88,10 @@ class UltralyticsTrackingProvider(TrackingProvider):
         for xyxy, track_id, class_id, confidence in zip(
             xyxy_values, track_ids, class_ids, confidences, strict=False
         ):
-            label = model_label_map.get(class_id)
-            if label is None:
+            mapped_info = model_label_map.get(class_id)
+            if mapped_info is None:
                 continue
+            label, source_label = mapped_info
 
             x1, y1, x2, y2 = xyxy
             observations.append(
@@ -98,6 +99,7 @@ class UltralyticsTrackingProvider(TrackingProvider):
                     frame_index=frame_index,
                     track_id=int(track_id),
                     label=label,
+                    source_label=source_label,
                     confidence=float(confidence),
                     bbox=BBox(
                         x1=max(0.0, min(1.0, x1 / video.width)),
@@ -133,12 +135,16 @@ class UltralyticsTrackingProvider(TrackingProvider):
         names = getattr(model.model, "names", None) or {}
         normalized = {int(idx): str(name).strip().lower() for idx, name in names.items()}
 
-        mapped: dict[int, str] = {}
+        mapped: dict[int, tuple[str, str]] = {}
         for class_id, name in normalized.items():
-            if name in {"person", "player", "goalkeeper", "referee"}:
-                mapped[class_id] = "player"
+            if name in {"person", "player"}:
+                mapped[class_id] = ("player", "player")
+            elif name == "goalkeeper":
+                mapped[class_id] = ("player", "goalkeeper")
+            elif name == "referee":
+                mapped[class_id] = ("player", "referee")
             elif name in {"sports ball", "ball"}:
-                mapped[class_id] = "ball"
+                mapped[class_id] = ("ball", "ball")
         return {
             "label_map": mapped,
         }
@@ -174,7 +180,7 @@ class UltralyticsTrackingProvider(TrackingProvider):
         tracks: list[TrackObservation],
         video: VideoMeta,
         config: PipelineConfig,
-        model_label_map: dict[int, str],
+        model_label_map: dict[int, tuple[str, str]],
     ) -> list[TrackObservation]:
         player_tracks = [track for track in tracks if track.label != "ball"]
         tracked_ball_tracks = [track.model_copy(update={"track_id": 0}) for track in tracks if track.label == "ball"]
@@ -196,13 +202,13 @@ class UltralyticsTrackingProvider(TrackingProvider):
         model,
         video: VideoMeta,
         config: PipelineConfig,
-        model_label_map: dict[int, str],
+        model_label_map: dict[int, tuple[str, str]],
     ) -> list[TrackObservation]:
         cap = cv2.VideoCapture(str(video.path))
         if not cap.isOpened():
             raise RuntimeError(f"Unable to open video for dedicated ball pass: {video.path}")
 
-        class_ids = [idx for idx, label in model_label_map.items() if label == "ball"]
+        class_ids = [idx for idx, mapped in model_label_map.items() if mapped[0] == "ball"]
         if not class_ids:
             cap.release()
             return []

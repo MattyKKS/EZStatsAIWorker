@@ -9,6 +9,8 @@ from ez_worker.schemas import Event, TrackObservation, VideoMeta
 
 
 PLAYER_COLOR = (64, 220, 96)
+GOALKEEPER_COLOR = (255, 128, 0)
+REFEREE_COLOR = (255, 64, 192)
 BALL_COLOR = (0, 165, 255)
 EVENT_COLOR = (255, 255, 255)
 
@@ -86,14 +88,16 @@ def _draw_track(frame, track: TrackObservation, video: VideoMeta) -> None:
         )
         return
 
-    cv2.rectangle(frame, (x1, y1), (x2, y2), PLAYER_COLOR, 2)
+    track_color = _track_color(track)
+    track_role = (track.source_label or track.label or "player").lower()
+    cv2.rectangle(frame, (x1, y1), (x2, y2), track_color, 2)
     cv2.putText(
         frame,
-        f"{track.track_id}",
+        f"{track.track_id} {track_role}",
         (x1, max(18, y1 - 6)),
         cv2.FONT_HERSHEY_SIMPLEX,
-        0.5,
-        PLAYER_COLOR,
+        0.45,
+        track_color,
         1,
         cv2.LINE_AA,
     )
@@ -111,3 +115,12 @@ def _draw_event(frame, event: Event) -> None:
         2,
         cv2.LINE_AA,
     )
+
+
+def _track_color(track: TrackObservation) -> tuple[int, int, int]:
+    source_label = (track.source_label or track.label or "").lower()
+    if source_label == "goalkeeper":
+        return GOALKEEPER_COLOR
+    if source_label == "referee":
+        return REFEREE_COLOR
+    return PLAYER_COLOR

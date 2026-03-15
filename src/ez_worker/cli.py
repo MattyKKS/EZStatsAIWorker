@@ -3,10 +3,31 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from ez_worker.appearance.prep import prepare_appearance_inputs
+from ez_worker.appearance.team_assignment import cluster_teams
+from ez_worker.appearance.apply_clusters import apply_team_clusters
+from ez_worker.appearance.team_report import build_team_report
+from ez_worker.appearance.team_report_analysis_ready import build_analysis_ready_team_report
+from ez_worker.appearance.role_hints import build_role_hints
+from ez_worker.appearance.role_filter import build_role_filtered_outputs
+from ez_worker.analytics.event_refine import build_analysis_ready_events
+from ez_worker.analytics.possession_report import build_possession_report
+from ez_worker.outputs.integration_bundle import build_integration_bundle
+from ez_worker.outputs.output_contract import build_output_contract
+from ez_worker.outputs.ui_payload import build_ui_payload
+from ez_worker.outputs.api_response import build_api_response
+from ez_worker.outputs.mock_api import build_mock_api
+from ez_worker.outputs.route_manifest import build_route_manifest
 from ez_worker.config import DEFAULT_CONFIG, PipelineConfig
 from ez_worker.data_init import init_data_layout
+from ez_worker.diagnostics.run_debug import build_run_debug_report
 from ez_worker.dataset_utils import prepare_roboflow_dataset_yaml
 from ez_worker.pipeline import run_analysis
+from ez_worker.spatial.pitch_prep import prepare_pitch_mapping
+from ez_worker.spatial.homography import apply_pitch_mapping
+from ez_worker.spatial.report import build_spatial_report
+from ez_worker.spatial.heatmap_export import build_heatmap_export
+from ez_worker.spatial.formation_export import build_formation_export
 from ez_worker.train import train_detector
 
 
@@ -76,6 +97,139 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("data/datasets/roboflow/detector"),
     )
 
+    prepare_appearance = subparsers.add_parser(
+        "prepare-appearance",
+        help="Build the next-stage appearance/team-clustering manifest for a completed run.",
+    )
+    prepare_appearance.add_argument("--run-dir", type=Path, required=True)
+
+    cluster_appearance = subparsers.add_parser(
+        "cluster-teams",
+        help="Cluster player tracks into appearance groups from a prepared run folder.",
+    )
+    cluster_appearance.add_argument("--run-dir", type=Path, required=True)
+    cluster_appearance.add_argument(
+        "--method",
+        default="color",
+        choices=["color", "siglip", "siglip-jersey"],
+    )
+    cluster_appearance.add_argument("--cluster-count", type=int, default=3)
+    cluster_appearance.add_argument("--model-name", default="google/siglip-base-patch16-224")
+
+    apply_teams = subparsers.add_parser(
+        "apply-team-clusters",
+        help="Convert cluster output into provisional team assignments and enriched outputs.",
+    )
+    apply_teams.add_argument("--run-dir", type=Path, required=True)
+
+    team_report = subparsers.add_parser(
+        "build-team-report",
+        help="Build a simple team-aware report from provisional team assignments.",
+    )
+    team_report.add_argument("--run-dir", type=Path, required=True)
+
+    team_report_analysis_ready = subparsers.add_parser(
+        "build-analysis-ready-team-report",
+        help="Build a cleaner team-aware report from the analysis-ready event and player files.",
+    )
+    team_report_analysis_ready.add_argument("--run-dir", type=Path, required=True)
+
+    role_hints = subparsers.add_parser(
+        "build-role-hints",
+        help="Build conservative referee and goalkeeper role hints from current team and spatial outputs.",
+    )
+    role_hints.add_argument("--run-dir", type=Path, required=True)
+
+    role_filter = subparsers.add_parser(
+        "build-analysis-ready",
+        help="Build role-aware filtered outputs for later analytics and event work.",
+    )
+    role_filter.add_argument("--run-dir", type=Path, required=True)
+
+    event_refine = subparsers.add_parser(
+        "build-analysis-ready-events",
+        help="Filter events through the analysis-ready player set and enrich them with team/role context.",
+    )
+    event_refine.add_argument("--run-dir", type=Path, required=True)
+
+    possession_report = subparsers.add_parser(
+        "build-possession-report",
+        help="Build a simple possession and timeline report from the analysis-ready event file.",
+    )
+    possession_report.add_argument("--run-dir", type=Path, required=True)
+
+    integration_bundle = subparsers.add_parser(
+        "build-integration-bundle",
+        help="Build one integration-ready bundle from the cleaned outputs for frontend/backend use.",
+    )
+    integration_bundle.add_argument("--run-dir", type=Path, required=True)
+
+    output_contract = subparsers.add_parser(
+        "build-output-contract",
+        help="Build a simple output contract file that explains which cleaned outputs frontend/backend should use.",
+    )
+    output_contract.add_argument("--run-dir", type=Path, required=True)
+
+    ui_payload = subparsers.add_parser(
+        "build-ui-payload",
+        help="Build one UI-friendly payload from the cleaned integration outputs.",
+    )
+    ui_payload.add_argument("--run-dir", type=Path, required=True)
+
+    api_response = subparsers.add_parser(
+        "build-api-response",
+        help="Build one API-friendly response object from the UI payload and output contract.",
+    )
+    api_response.add_argument("--run-dir", type=Path, required=True)
+
+    mock_api = subparsers.add_parser(
+        "build-mock-api",
+        help="Split the API-friendly response into mock endpoint files for frontend/backend integration.",
+    )
+    mock_api.add_argument("--run-dir", type=Path, required=True)
+
+    route_manifest = subparsers.add_parser(
+        "build-route-manifest",
+        help="Build a simple route manifest that maps mock endpoint files to API paths.",
+    )
+    route_manifest.add_argument("--run-dir", type=Path, required=True)
+
+    pitch_prep = subparsers.add_parser(
+        "prepare-pitch-mapping",
+        help="Create a reference frame and manual template for later pitch homography work.",
+    )
+    pitch_prep.add_argument("--run-dir", type=Path, required=True)
+
+    pitch_apply = subparsers.add_parser(
+        "apply-pitch-mapping",
+        help="Apply a filled pitch mapping template and project tracks into pitch coordinates.",
+    )
+    pitch_apply.add_argument("--run-dir", type=Path, required=True)
+
+    spatial_report = subparsers.add_parser(
+        "build-spatial-report",
+        help="Build simple team and player spatial summaries from projected pitch tracks.",
+    )
+    spatial_report.add_argument("--run-dir", type=Path, required=True)
+
+    heatmap_export = subparsers.add_parser(
+        "build-heatmap-export",
+        help="Build heatmap and formation-friendly exports from projected pitch tracks.",
+    )
+    heatmap_export.add_argument("--run-dir", type=Path, required=True)
+
+    formation_export = subparsers.add_parser(
+        "build-formation-export",
+        help="Build a simple formation and tactical layout export from heatmap output.",
+    )
+    formation_export.add_argument("--run-dir", type=Path, required=True)
+
+    run_debug = subparsers.add_parser(
+        "build-run-debug-report",
+        help="Build a compact diagnostics report for a completed run to debug detector and cleanup quality.",
+    )
+    run_debug.add_argument("--run-dir", type=Path, required=True)
+
     train = subparsers.add_parser("train-detector", help="Train the football detector.")
     train.add_argument(
         "--dataset-dir",
@@ -138,6 +292,116 @@ def main() -> None:
     if args.command == "prepare-roboflow":
         prepared_yaml = prepare_roboflow_dataset_yaml(args.dataset_dir)
         print(prepared_yaml)
+        return
+
+    if args.command == "prepare-appearance":
+        manifest_path = prepare_appearance_inputs(args.run_dir)
+        print(manifest_path)
+        return
+
+    if args.command == "cluster-teams":
+        output_path = cluster_teams(
+            args.run_dir,
+            method=args.method,
+            cluster_count=args.cluster_count,
+            model_name=args.model_name,
+        )
+        print(output_path)
+        return
+
+    if args.command == "apply-team-clusters":
+        output_path = apply_team_clusters(args.run_dir)
+        print(output_path)
+        return
+
+    if args.command == "build-team-report":
+        output_path = build_team_report(args.run_dir)
+        print(output_path)
+        return
+
+    if args.command == "build-analysis-ready-team-report":
+        output_path = build_analysis_ready_team_report(args.run_dir)
+        print(output_path)
+        return
+
+    if args.command == "build-role-hints":
+        output_path = build_role_hints(args.run_dir)
+        print(output_path)
+        return
+
+    if args.command == "build-analysis-ready":
+        output_path = build_role_filtered_outputs(args.run_dir)
+        print(output_path)
+        return
+
+    if args.command == "build-analysis-ready-events":
+        output_path = build_analysis_ready_events(args.run_dir)
+        print(output_path)
+        return
+
+    if args.command == "build-possession-report":
+        output_path = build_possession_report(args.run_dir)
+        print(output_path)
+        return
+
+    if args.command == "build-integration-bundle":
+        output_path = build_integration_bundle(args.run_dir)
+        print(output_path)
+        return
+
+    if args.command == "build-output-contract":
+        output_path = build_output_contract(args.run_dir)
+        print(output_path)
+        return
+
+    if args.command == "build-ui-payload":
+        output_path = build_ui_payload(args.run_dir)
+        print(output_path)
+        return
+
+    if args.command == "build-api-response":
+        output_path = build_api_response(args.run_dir)
+        print(output_path)
+        return
+
+    if args.command == "build-mock-api":
+        output_path = build_mock_api(args.run_dir)
+        print(output_path)
+        return
+
+    if args.command == "build-route-manifest":
+        output_path = build_route_manifest(args.run_dir)
+        print(output_path)
+        return
+
+    if args.command == "prepare-pitch-mapping":
+        output_path = prepare_pitch_mapping(args.run_dir)
+        print(output_path)
+        return
+
+    if args.command == "apply-pitch-mapping":
+        output_path = apply_pitch_mapping(args.run_dir)
+        print(output_path)
+        return
+
+    if args.command == "build-spatial-report":
+        output_path = build_spatial_report(args.run_dir)
+        print(output_path)
+        return
+
+    if args.command == "build-heatmap-export":
+        output_path = build_heatmap_export(args.run_dir)
+        print(output_path)
+        return
+
+    if args.command == "build-formation-export":
+        output_path = build_formation_export(args.run_dir)
+        print(output_path)
+        return
+
+    if args.command == "build-run-debug-report":
+        output_path = build_run_debug_report(args.run_dir)
+        print(output_path)
         return
 
     if args.command == "train-detector":

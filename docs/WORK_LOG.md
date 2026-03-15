@@ -1,5 +1,29 @@
 # Work Log
 
+## Current Focus
+
+Last updated: `2026-03-15 00:10` Bangkok time
+
+Just finished:
+
+- checked the new rendered run and confirmed the renderer is no longer the blocker
+- confirmed the latest run still contains zero `goalkeeper` and zero `referee` source labels
+- confirmed the model, not just cleanup logic, is now the bottleneck for role separation
+- added class-aware rendering and a conservative touchline-retention bonus for players near image edges
+- set up the V2 retraining plan and the hard-example collection checklist
+
+Doing now:
+
+- shifting from code-only tuning to targeted detector retraining
+- focusing the next data pass on goalkeeper, referee, and sideline-player failures
+- keeping the current worker and ball logic as the safe base while retraining the detector
+
+Next:
+
+- collect hard examples from the benchmark clip
+- run the first V2 retrain candidate
+- benchmark the retrained model on the same 30-second clip
+
 ## 2026-03-10
 
 ### Added
@@ -33,6 +57,18 @@
 - Final video rendering now uses the cleaned post-processed tracks instead of raw YOLO overlays.
 - Ball cleanup now supports trajectory-based re-acquisition and frame dropping for ambiguous multi-ball detections.
 - Ball source merging now keeps the dedicated ball pass as primary but falls back to tracked-stream ball detections on frames where the dedicated pass misses.
+- Added a separate appearance clustering mode that focuses SigLIP on the upper-body jersey region without changing the existing clustering baseline.
+- Added a post-run team assignment step that converts appearance clusters into provisional `team_id` outputs and team summaries without changing V1 tracking.
+- Added a post-run team report step that builds simple team-aware summaries from the current events and team assignments.
+- Added a post-run pitch mapping prep step that creates a reference frame and manual homography template without changing V1 tracking.
+- Added a post-run homography application step that projects team-aware tracks into pitch coordinates once a manual template is filled.
+- Updated the pitch-mapping template to use midfield-visible landmarks so common broadcast views can be mapped without requiring off-screen corners or penalty spots.
+- Added a post-run spatial report step that summarizes projected player and team positions without changing V1 tracking.
+- Added a post-run heatmap export step that creates team/player grids and formation-friendly positions from projected pitch tracks.
+- Added a post-run formation export step that creates simple team centroids, ordered player points, and visible line groupings from projected pitch tracks.
+- Added a post-run role hints step that creates conservative referee and goalkeeper candidate hints from team-aware and spatial outputs.
+- Added a post-run analysis-ready filtering step that removes likely referee/outlier tracks from downstream player files.
+- Added a post-run analysis-ready event cleanup step that removes events involving removed referee/outlier tracks and enriches kept events with team/role context.
 
 ### Changed
 

@@ -15,6 +15,13 @@ Requires-Dist: opencv-python<5.0,>=4.10; extra == "cv"
 Provides-Extra: ml
 Requires-Dist: ultralytics<9.0,>=8.3; extra == "ml"
 Requires-Dist: supervision<0.26,>=0.25; extra == "ml"
+Provides-Extra: appearance
+Requires-Dist: scikit-learn<2.0,>=1.5; extra == "appearance"
+Requires-Dist: umap-learn<0.6,>=0.5; extra == "appearance"
+Requires-Dist: transformers<5.0,>=4.44; extra == "appearance"
+Requires-Dist: Pillow<11.0,>=10.4; extra == "appearance"
+Requires-Dist: sentencepiece<0.3,>=0.2; extra == "appearance"
+Requires-Dist: protobuf<6.0,>=5.28; extra == "appearance"
 
 # EZ Stats AI Worker
 
@@ -38,9 +45,14 @@ This repository now contains the first scaffold:
 - event/stat generation from track data
 - output writers
 - dataset/setup documentation
+- work log in `docs/WORK_LOG.md`
 
-The real detector/tracker models are not wired in yet. The next implementation step is replacing the mock provider with a real inference provider.
-The repository now includes a first `ultralytics` provider for real baseline detection/tracking, but it still needs the `ml` dependencies installed before you can run it.
+The repository now includes:
+
+- a mock provider for dry runs
+- a first `ultralytics` provider for real baseline detection/tracking
+- a proposal-aligned Roboflow-first next-stage scaffold
+- a documented `v1 baseline` fallback point
 
 ## Recommended Python version
 
@@ -112,6 +124,59 @@ For real baseline inference:
 ```bash
 pip install -e .[ml]
 ez-worker analyze --video data/raw/sample.mp4 --provider ultralytics --render-video
+```
+
+If the baseline is noisy, start by filtering short or low-confidence tracks before moving to football-specific training:
+
+```bash
+ez-worker analyze --video data/raw/sample.mp4 --provider ultralytics --render-video --min-player-confidence 0.45 --min-track-length 6
+```
+
+For the proposal-aligned next stage:
+
+```bash
+ez-worker init-data
+```
+
+Then put Roboflow detector data under `data/datasets/roboflow/`.
+
+Prepare the Roboflow dataset YAML for local training:
+
+```bash
+ez-worker prepare-roboflow --dataset-dir data/datasets/roboflow/detector
+```
+
+Train the proposal-aligned football detector:
+
+```bash
+ez-worker train-detector --dataset-dir data/datasets/roboflow/detector --model-name yolov8m.pt --epochs 80 --image-size 1280 --batch-size 8
+```
+
+Run inference with a trained football-specific detector:
+
+```bash
+ez-worker analyze --video data/raw/sample.mp4 --provider ultralytics --model-name artifacts/training/roboflow_detector_v1_light/weights/best.pt --render-video --frame-step 3
+```
+
+Export player crops for the next `SigLIP + UMAP + KMeans` stage:
+
+```bash
+ez-worker analyze --video data/raw/sample.mp4 --provider ultralytics --model-name artifacts/training/roboflow_detector_v1_light/weights/best.pt --render-video --export-player-crops
+```
+
+## Repo Notes
+
+- Change tracking and component responsibilities are documented in `docs/WORK_LOG.md`.
+- The current stable fallback is documented in `docs/v1_baseline_summary.md`.
+- The planned work after the baseline is documented in `docs/next_steps_after_v1.md`.
+- The appearance/team-prep stage is documented in `docs/appearance_next_stage.md`.
+- The appearance clustering step is documented in `docs/team_clustering_next_stage.md`.
+- The implementation should remain aligned with the proposal draft stack.
+
+Force NVIDIA GPU 0 explicitly:
+
+```bash
+ez-worker train-detector --dataset-dir data/datasets/roboflow/detector --model-name yolov8m.pt --epochs 60 --image-size 1280 --batch-size 6 --device 0
 ```
 
 ## Repository layout

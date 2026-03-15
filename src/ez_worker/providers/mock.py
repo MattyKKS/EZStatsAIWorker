@@ -39,6 +39,7 @@ class MockTrackingProvider(TrackingProvider):
             frame_index=frame_index,
             track_id=track_id,
             label="player",
+            source_label="player",
             bbox=BBox(x1=x - w, y1=y - h, x2=x + w, y2=y + h),
         )
 
@@ -48,5 +49,6 @@ class MockTrackingProvider(TrackingProvider):
             frame_index=frame_index,
             track_id=0,
             label="ball",
+            source_label="ball",
             bbox=BBox(x1=x - r, y1=y - r, x2=x + r, y2=y + r),
         )

@@ -32,6 +32,7 @@ class TrackObservation(BaseModel):
     frame_index: int
     track_id: int
     label: str
+    source_label: str | None = None
     confidence: float = Field(default=1.0)
     bbox: BBox
     team_id: int | None = None

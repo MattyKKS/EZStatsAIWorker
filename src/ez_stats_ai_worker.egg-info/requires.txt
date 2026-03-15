@@ -2,6 +2,14 @@ pydantic<3.0,>=2.10
 pyyaml<7.0,>=6.0
 numpy<3.0,>=1.26
 
+[appearance]
+scikit-learn<2.0,>=1.5
+umap-learn<0.6,>=0.5
+transformers<5.0,>=4.44
+Pillow<11.0,>=10.4
+sentencepiece<0.3,>=0.2
+protobuf<6.0,>=5.28
+
 [cv]
 opencv-python<5.0,>=4.10
 

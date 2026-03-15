@@ -27,6 +27,7 @@ The repository now includes:
 - a mock provider for dry runs
 - a first `ultralytics` provider for real baseline detection/tracking
 - a proposal-aligned Roboflow-first next-stage scaffold
+- a documented `v1 baseline` fallback point
 
 ## Recommended Python version
 
@@ -140,7 +141,11 @@ ez-worker analyze --video data/raw/sample.mp4 --provider ultralytics --model-nam
 
 ## Repo Notes
 
-- Change tracking and component responsibilities are documented in `docs/WORK_LOG.md`.
+- Start with `docs/project_path_and_status.md` for the full project history, current step, and next step.
+- Use `docs/v1_baseline_summary.md` for the stable fallback baseline.
+- Use `docs/tutorial_references.md` to see how both tutorials are influencing the project.
+- Use `docs/WORK_LOG.md` for the most recent changes and current focus.
+- The smaller `docs/*_next_stage.md` files are step notes for specific commands only.
 - The implementation should remain aligned with the proposal draft stack.
 
 Force NVIDIA GPU 0 explicitly:

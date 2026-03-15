@@ -29,6 +29,14 @@ ml = [
   "ultralytics>=8.3,<9.0",
   "supervision>=0.25,<0.26",
 ]
+appearance = [
+  "scikit-learn>=1.5,<2.0",
+  "umap-learn>=0.5,<0.6",
+  "transformers>=4.44,<5.0",
+  "Pillow>=10.4,<11.0",
+  "sentencepiece>=0.2,<0.3",
+  "protobuf>=5.28,<6.0",
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}

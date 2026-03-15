@@ -70,7 +70,14 @@ def limit_players_per_frame(
         frame_tracks = by_frame[frame_index]
         players = [track for track in frame_tracks if track.label == "player"]
         non_players = [track for track in frame_tracks if track.label != "player"]
-        players.sort(key=lambda track: track.confidence, reverse=True)
+        players.sort(
+            key=lambda track: (
+                _player_priority(track),
+                _touchline_priority(track),
+                track.confidence,
+            ),
+            reverse=True,
+        )
         limited.extend(players[:max_players_per_frame])
         limited.extend(non_players)
     return sorted(limited, key=lambda track: (track.frame_index, track.label, track.track_id))
@@ -215,15 +222,26 @@ def keep_best_player_tracks(
         else:
             other_tracks.append(track)
 
-    scored_ids = []
+    track_infos = []
     for track_id, obs_list in players_by_id.items():
         frame_count = len(obs_list)
         avg_confidence = sum(obs.confidence for obs in obs_list) / max(frame_count, 1)
-        scored_ids.append((track_id, frame_count, avg_confidence))
+        avg_priority = sum(_player_priority(obs) for obs in obs_list) / max(frame_count, 1)
+        avg_touchline_priority = sum(_touchline_priority(obs) for obs in obs_list) / max(frame_count, 1)
+        frame_indexes = {obs.frame_index for obs in obs_list}
+        track_infos.append(
+            {
+                "track_id": track_id,
+                "avg_priority": avg_priority,
+                "avg_touchline_priority": avg_touchline_priority,
+                "frame_count": frame_count,
+                "avg_confidence": avg_confidence,
+                "frame_indexes": frame_indexes,
+            }
+        )
 
-    scored_ids = [item for item in scored_ids if item[1] >= min_player_track_frames]
-    scored_ids.sort(key=lambda item: (item[1], item[2]), reverse=True)
-    keep_ids = {track_id for track_id, _, _ in scored_ids[:max_unique_players]}
+    track_infos = [item for item in track_infos if item["frame_count"] >= min_player_track_frames]
+    keep_ids = _select_player_track_ids(track_infos, max_unique_players=max_unique_players)
 
     kept_players = [
         track
@@ -397,3 +415,68 @@ def _center_distance_px(a: TrackObservation, b: TrackObservation, video: VideoMe
 
 def _lerp(a: float, b: float, alpha: float) -> float:
     return a + (b - a) * alpha
+
+
+def _player_priority(track: TrackObservation) -> float:
+    source_label = (track.source_label or track.label or "").lower()
+    if source_label == "player":
+        return 3.0
+    if source_label == "goalkeeper":
+        return 2.0
+    if source_label == "referee":
+        return 1.0
+    return 0.5
+
+
+def _touchline_priority(track: TrackObservation) -> float:
+    width = max(0.0, track.bbox.x2 - track.bbox.x1)
+    height = max(0.0, track.bbox.y2 - track.bbox.y1)
+    if height <= 0.02 or width <= 0.002:
+        return 0.0
+
+    near_left = track.bbox.x1 <= 0.035
+    near_right = track.bbox.x2 >= 0.965
+    near_touchline = near_left or near_right
+    if not near_touchline:
+        return 0.0
+
+    # Give a small retention bonus to plausible sideline players so they are not
+    # consistently dropped by confidence-only pruning.
+    return 0.35
+
+
+def _select_player_track_ids(
+    track_infos: list[dict],
+    *,
+    max_unique_players: int,
+) -> set[int]:
+    if len(track_infos) <= max_unique_players:
+        return {int(item["track_id"]) for item in track_infos}
+
+    remaining = list(track_infos)
+    covered_frames: set[int] = set()
+    selected_ids: set[int] = set()
+
+    while remaining and len(selected_ids) < max_unique_players:
+        best_item = None
+        best_score = None
+        for item in remaining:
+            new_frames = len(item["frame_indexes"] - covered_frames)
+            score = (
+                new_frames * 5.0,
+                item["avg_priority"] * 2.0 + item["avg_touchline_priority"],
+                item["frame_count"],
+                item["avg_confidence"],
+            )
+            if best_score is None or score > best_score:
+                best_score = score
+                best_item = item
+
+        if best_item is None:
+            break
+
+        selected_ids.add(int(best_item["track_id"]))
+        covered_frames.update(best_item["frame_indexes"])
+        remaining = [item for item in remaining if int(item["track_id"]) != int(best_item["track_id"])]
+
+    return selected_ids
