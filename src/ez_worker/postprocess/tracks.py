@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from collections import defaultdict
 
 from ez_worker.schemas import TrackObservation, VideoMeta
@@ -228,6 +229,8 @@ def keep_best_player_tracks(
         avg_confidence = sum(obs.confidence for obs in obs_list) / max(frame_count, 1)
         avg_priority = sum(_player_priority(obs) for obs in obs_list) / max(frame_count, 1)
         avg_touchline_priority = sum(_touchline_priority(obs) for obs in obs_list) / max(frame_count, 1)
+        source_counts = Counter((obs.source_label or obs.label or "").lower() for obs in obs_list)
+        dominant_source_label = source_counts.most_common(1)[0][0] if source_counts else "player"
         frame_indexes = {obs.frame_index for obs in obs_list}
         track_infos.append(
             {
@@ -236,12 +239,24 @@ def keep_best_player_tracks(
                 "avg_touchline_priority": avg_touchline_priority,
                 "frame_count": frame_count,
                 "avg_confidence": avg_confidence,
+                "dominant_source_label": dominant_source_label,
                 "frame_indexes": frame_indexes,
             }
         )
 
     track_infos = [item for item in track_infos if item["frame_count"] >= min_player_track_frames]
     keep_ids = _select_player_track_ids(track_infos, max_unique_players=max_unique_players)
+
+    # Preserve up to two goalkeeper-like tracks even when global player pruning is aggressive.
+    goalkeeper_candidates = [
+        item for item in track_infos if item["dominant_source_label"] == "goalkeeper"
+    ]
+    goalkeeper_candidates.sort(
+        key=lambda item: (item["frame_count"], item["avg_confidence"]),
+        reverse=True,
+    )
+    for candidate in goalkeeper_candidates[:2]:
+        keep_ids.add(int(candidate["track_id"]))
 
     kept_players = [
         track
@@ -419,10 +434,10 @@ def _lerp(a: float, b: float, alpha: float) -> float:
 
 def _player_priority(track: TrackObservation) -> float:
     source_label = (track.source_label or track.label or "").lower()
+    if source_label == "goalkeeper":
+        return 3.4
     if source_label == "player":
         return 3.0
-    if source_label == "goalkeeper":
-        return 2.0
     if source_label == "referee":
         return 1.0
     return 0.5
