@@ -39,6 +39,8 @@ def run_analysis(video_path: Path, config: PipelineConfig) -> Path:
         max_ball_jump_px=config.max_ball_jump_px,
         ball_reset_gap_frames=config.ball_reset_gap_frames,
         ball_reset_confidence=config.ball_reset_confidence,
+        ball_hold_max_gap_frames=config.ball_hold_max_gap_frames,
+        ball_smoothing_alpha=config.ball_smoothing_alpha,
         drop_ambiguous_ball_frames=config.drop_ambiguous_ball_frames,
     )
     events = detect_events(

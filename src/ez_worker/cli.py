@@ -72,6 +72,8 @@ def build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--max-ball-jump-px", type=float, default=DEFAULT_CONFIG.max_ball_jump_px)
     analyze.add_argument("--ball-reset-gap-frames", type=int, default=DEFAULT_CONFIG.ball_reset_gap_frames)
     analyze.add_argument("--ball-reset-confidence", type=float, default=DEFAULT_CONFIG.ball_reset_confidence)
+    analyze.add_argument("--ball-hold-max-gap-frames", type=int, default=DEFAULT_CONFIG.ball_hold_max_gap_frames)
+    analyze.add_argument("--ball-smoothing-alpha", type=float, default=DEFAULT_CONFIG.ball_smoothing_alpha)
     analyze.add_argument("--max-crops-per-track", type=int, default=DEFAULT_CONFIG.max_crops_per_track)
     analyze.add_argument(
         "--possession-distance-threshold-px",
@@ -275,6 +277,8 @@ def main() -> None:
             max_ball_jump_px=args.max_ball_jump_px,
             ball_reset_gap_frames=args.ball_reset_gap_frames,
             ball_reset_confidence=args.ball_reset_confidence,
+            ball_hold_max_gap_frames=args.ball_hold_max_gap_frames,
+            ball_smoothing_alpha=args.ball_smoothing_alpha,
             max_crops_per_track=args.max_crops_per_track,
             possession_distance_threshold_px=args.possession_distance_threshold_px,
             possession_min_consecutive_frames=args.possession_min_consecutive_frames,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
 import cv2
@@ -40,6 +40,7 @@ def render_tracks_video(
     tracks_by_frame: dict[int, list[TrackObservation]] = defaultdict(list)
     for track in tracks:
         tracks_by_frame[track.frame_index].append(track)
+    sticky_source_by_track = _build_sticky_source_labels(tracks)
 
     events_by_frame: dict[int, list[Event]] = defaultdict(list)
     for event in events:
@@ -53,7 +54,7 @@ def render_tracks_video(
                 break
 
             for track in tracks_by_frame.get(frame_index, []):
-                _draw_track(frame, track, video)
+                _draw_track(frame, track, video, sticky_source_by_track)
 
             for event in events_by_frame.get(frame_index, []):
                 _draw_event(frame, event)
@@ -65,7 +66,12 @@ def render_tracks_video(
         writer.release()
 
 
-def _draw_track(frame, track: TrackObservation, video: VideoMeta) -> None:
+def _draw_track(
+    frame,
+    track: TrackObservation,
+    video: VideoMeta,
+    sticky_source_by_track: dict[int, str],
+) -> None:
     x1 = int(track.bbox.x1 * video.width)
     y1 = int(track.bbox.y1 * video.height)
     x2 = int(track.bbox.x2 * video.width)
@@ -88,9 +94,11 @@ def _draw_track(frame, track: TrackObservation, video: VideoMeta) -> None:
         )
         return
 
-    track_color = _track_color(track)
-    track_role = (track.source_label or track.label or "player").lower()
-    cv2.rectangle(frame, (x1, y1), (x2, y2), track_color, 2)
+    sticky_source = sticky_source_by_track.get(int(track.track_id), track.source_label or track.label)
+    track_color = _track_color(track, sticky_source)
+    track_role = _track_role_tag(sticky_source)
+    line_width = 3 if track_role == "GK" else 2
+    cv2.rectangle(frame, (x1, y1), (x2, y2), track_color, line_width)
     cv2.putText(
         frame,
         f"{track.track_id} {track_role}",
@@ -117,10 +125,40 @@ def _draw_event(frame, event: Event) -> None:
     )
 
 
-def _track_color(track: TrackObservation) -> tuple[int, int, int]:
-    source_label = (track.source_label or track.label or "").lower()
+def _track_color(track: TrackObservation, source_label: str | None = None) -> tuple[int, int, int]:
+    source_label = (source_label or track.source_label or track.label or "").lower()
     if source_label == "goalkeeper":
         return GOALKEEPER_COLOR
     if source_label == "referee":
         return REFEREE_COLOR
     return PLAYER_COLOR
+
+
+def _track_role_tag(source_label: str | None) -> str:
+    source_label = (source_label or "").lower()
+    if source_label == "goalkeeper":
+        return "GK"
+    if source_label == "referee":
+        return "REF"
+    return "PLY"
+
+
+def _build_sticky_source_labels(tracks: list[TrackObservation]) -> dict[int, str]:
+    by_track: dict[int, list[TrackObservation]] = defaultdict(list)
+    for track in tracks:
+        if track.label == "player":
+            by_track[int(track.track_id)].append(track)
+
+    sticky: dict[int, str] = {}
+    for track_id, obs_list in by_track.items():
+        source_counts = Counter((obs.source_label or obs.label or "player").lower() for obs in obs_list)
+        total = len(obs_list)
+        goalkeeper_votes = int(source_counts.get("goalkeeper", 0))
+        referee_votes = int(source_counts.get("referee", 0))
+        if goalkeeper_votes >= max(2, int(total * 0.08)):
+            sticky[track_id] = "goalkeeper"
+        elif referee_votes >= max(2, int(total * 0.10)):
+            sticky[track_id] = "referee"
+        else:
+            sticky[track_id] = "player"
+    return sticky

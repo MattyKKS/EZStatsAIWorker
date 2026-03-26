@@ -23,6 +23,8 @@ def cleanup_tracks(
     max_ball_jump_px: float,
     ball_reset_gap_frames: int,
     ball_reset_confidence: float,
+    ball_hold_max_gap_frames: int,
+    ball_smoothing_alpha: float,
     drop_ambiguous_ball_frames: bool,
 ) -> list[TrackObservation]:
     cleaned = limit_players_per_frame(tracks, max_players_per_frame=max_players_per_frame)
@@ -35,6 +37,8 @@ def cleanup_tracks(
             max_ball_jump_px=max_ball_jump_px,
             ball_reset_gap_frames=ball_reset_gap_frames,
             ball_reset_confidence=ball_reset_confidence,
+            ball_hold_max_gap_frames=ball_hold_max_gap_frames,
+            ball_smoothing_alpha=ball_smoothing_alpha,
         )
     if merge_tracklets:
         cleaned = merge_player_tracklets(
@@ -54,6 +58,7 @@ def cleanup_tracks(
             frame_step=frame_step,
             max_gap_frames=max_interpolation_gap_frames,
         )
+    cleaned = stabilize_player_source_labels(cleaned)
     return cleaned
 
 
@@ -116,6 +121,8 @@ def clean_ball_detections(
     max_ball_jump_px: float,
     ball_reset_gap_frames: int,
     ball_reset_confidence: float,
+    ball_hold_max_gap_frames: int,
+    ball_smoothing_alpha: float,
 ) -> list[TrackObservation]:
     balls = [track for track in tracks if track.label == "ball"]
     non_balls = [track for track in tracks if track.label != "ball"]
@@ -129,12 +136,28 @@ def clean_ball_detections(
     cleaned_balls: list[TrackObservation] = []
     previous_ball: TrackObservation | None = None
     last_ball: TrackObservation | None = None
-    for frame_index in sorted(balls_by_frame):
+    for frame_index in range(min(balls_by_frame), max(balls_by_frame) + frame_step, frame_step):
         frame_candidates = sorted(
-            balls_by_frame[frame_index],
+            balls_by_frame.get(frame_index, []),
             key=lambda track: track.confidence,
             reverse=True,
         )
+        if not frame_candidates:
+            if last_ball is None:
+                continue
+            gap_frames = frame_index - last_ball.frame_index
+            if 0 < gap_frames <= ball_hold_max_gap_frames:
+                held = last_ball.model_copy(
+                    update={
+                        "frame_index": frame_index,
+                        "confidence": max(0.05, last_ball.confidence * 0.55),
+                    }
+                )
+                cleaned_balls.append(held)
+                previous_ball = last_ball
+                last_ball = held
+            continue
+
         if last_ball is None:
             selected = frame_candidates[0]
             cleaned_balls.append(selected)
@@ -160,9 +183,18 @@ def clean_ball_detections(
             else:
                 continue
 
+        if last_ball is not None and ball_smoothing_alpha > 0.0:
+            selected = _smooth_ball_observation(last_ball, selected, ball_smoothing_alpha)
+
         cleaned_balls.append(selected)
         previous_ball = last_ball
         last_ball = selected
+
+    cleaned_balls = _interpolate_ball_short_gaps(
+        cleaned_balls,
+        frame_step=frame_step,
+        max_gap_frames=ball_hold_max_gap_frames,
+    )
 
     return sorted(non_balls + cleaned_balls, key=lambda track: (track.frame_index, track.label, track.track_id))
 
@@ -207,6 +239,53 @@ def _predict_ball_center(
     vx = (last_ball.bbox.cx - previous_ball.bbox.cx) / frame_delta
     vy = (last_ball.bbox.cy - previous_ball.bbox.cy) / frame_delta
     return last_ball.bbox.cx + vx, last_ball.bbox.cy + vy
+
+
+def _smooth_ball_observation(
+    previous: TrackObservation,
+    current: TrackObservation,
+    alpha: float,
+) -> TrackObservation:
+    alpha = max(0.0, min(1.0, alpha))
+    if alpha <= 0.0:
+        return current
+
+    def blend(prev_value: float, cur_value: float) -> float:
+        return (1.0 - alpha) * cur_value + alpha * prev_value
+
+    return current.model_copy(
+        update={
+            "bbox": current.bbox.model_copy(
+                update={
+                    "x1": blend(previous.bbox.x1, current.bbox.x1),
+                    "y1": blend(previous.bbox.y1, current.bbox.y1),
+                    "x2": blend(previous.bbox.x2, current.bbox.x2),
+                    "y2": blend(previous.bbox.y2, current.bbox.y2),
+                }
+            )
+        }
+    )
+
+
+def _interpolate_ball_short_gaps(
+    balls: list[TrackObservation],
+    *,
+    frame_step: int,
+    max_gap_frames: int,
+) -> list[TrackObservation]:
+    if len(balls) <= 1:
+        return balls
+
+    ordered = sorted(balls, key=lambda track: track.frame_index)
+    output: list[TrackObservation] = [ordered[0]]
+    for prev, cur in zip(ordered, ordered[1:]):
+        gap = cur.frame_index - prev.frame_index
+        if gap > frame_step and gap <= max_gap_frames:
+            for frame_index in range(prev.frame_index + frame_step, cur.frame_index, frame_step):
+                alpha = (frame_index - prev.frame_index) / max(gap, 1)
+                output.append(_interpolate_observation(prev, cur, frame_index, alpha))
+        output.append(cur)
+    return output
 
 
 def keep_best_player_tracks(
@@ -495,3 +574,31 @@ def _select_player_track_ids(
         remaining = [item for item in remaining if int(item["track_id"]) != int(best_item["track_id"])]
 
     return selected_ids
+
+
+def stabilize_player_source_labels(tracks: list[TrackObservation]) -> list[TrackObservation]:
+    players_by_id: dict[int, list[TrackObservation]] = defaultdict(list)
+    for track in tracks:
+        if track.label == "player":
+            players_by_id[int(track.track_id)].append(track)
+
+    goalkeeper_vote_rows: list[tuple[int, int, int]] = []
+    for track_id, obs_list in players_by_id.items():
+        source_counts = Counter((obs.source_label or obs.label or "").lower() for obs in obs_list)
+        goalkeeper_votes = int(source_counts.get("goalkeeper", 0))
+        player_votes = int(source_counts.get("player", 0))
+        if goalkeeper_votes >= 3 and goalkeeper_votes >= max(1, int(0.15 * len(obs_list))):
+            goalkeeper_vote_rows.append((track_id, goalkeeper_votes, player_votes))
+
+    goalkeeper_vote_rows.sort(key=lambda row: (row[1], -row[2]), reverse=True)
+    goalkeeper_track_ids = {row[0] for row in goalkeeper_vote_rows[:2]}
+    if not goalkeeper_track_ids:
+        return tracks
+
+    stabilized: list[TrackObservation] = []
+    for track in tracks:
+        if track.label == "player" and int(track.track_id) in goalkeeper_track_ids:
+            stabilized.append(track.model_copy(update={"source_label": "goalkeeper"}))
+        else:
+            stabilized.append(track)
+    return stabilized

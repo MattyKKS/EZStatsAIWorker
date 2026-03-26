@@ -30,6 +30,8 @@ class PipelineConfig(BaseModel):
     max_ball_jump_px: float = Field(default=120.0, gt=0)
     ball_reset_gap_frames: int = Field(default=20, ge=0)
     ball_reset_confidence: float = Field(default=0.45, ge=0.0, le=1.0)
+    ball_hold_max_gap_frames: int = Field(default=6, ge=0)
+    ball_smoothing_alpha: float = Field(default=0.35, ge=0.0, le=1.0)
     drop_ambiguous_ball_frames: bool = Field(default=True)
     export_player_crops: bool = Field(default=False)
     max_crops_per_track: int = Field(default=8, ge=1)
