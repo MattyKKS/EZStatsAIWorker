@@ -582,15 +582,19 @@ def stabilize_player_source_labels(tracks: list[TrackObservation]) -> list[Track
         if track.label == "player":
             players_by_id[int(track.track_id)].append(track)
 
-    goalkeeper_vote_rows: list[tuple[int, int, int]] = []
+    goalkeeper_vote_rows: list[tuple[int, int, float, float]] = []
     for track_id, obs_list in players_by_id.items():
         source_counts = Counter((obs.source_label or obs.label or "").lower() for obs in obs_list)
         goalkeeper_votes = int(source_counts.get("goalkeeper", 0))
-        player_votes = int(source_counts.get("player", 0))
-        if goalkeeper_votes >= 3 and goalkeeper_votes >= max(1, int(0.15 * len(obs_list))):
-            goalkeeper_vote_rows.append((track_id, goalkeeper_votes, player_votes))
+        referee_votes = int(source_counts.get("referee", 0))
+        if goalkeeper_votes < 2 or referee_votes > goalkeeper_votes:
+            continue
+        mean_cx = sum(obs.bbox.cx for obs in obs_list) / max(len(obs_list), 1)
+        edge_score = abs(mean_cx - 0.5)
+        gk_ratio = goalkeeper_votes / max(len(obs_list), 1)
+        goalkeeper_vote_rows.append((track_id, goalkeeper_votes, gk_ratio, edge_score))
 
-    goalkeeper_vote_rows.sort(key=lambda row: (row[1], -row[2]), reverse=True)
+    goalkeeper_vote_rows.sort(key=lambda row: (row[1], row[2], row[3]), reverse=True)
     goalkeeper_track_ids = {row[0] for row in goalkeeper_vote_rows[:2]}
     if not goalkeeper_track_ids:
         return tracks

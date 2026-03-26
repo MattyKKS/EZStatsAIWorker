@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 from pathlib import Path
+import warnings
 
 import cv2
 
@@ -29,6 +30,15 @@ class UltralyticsTrackingProvider(TrackingProvider):
 
         model = YOLO(config.model_name)
         model_info = self._build_model_info(model)
+        if not model_info["has_goalkeeper_referee_classes"]:
+            warnings.warn(
+                (
+                    f"Model '{config.model_name}' does not expose both 'goalkeeper' and 'referee' classes. "
+                    "This run will treat most humans as generic players (tutorial-style GK/REF separation "
+                    "requires football-trained weights like a Roboflow-trained best.pt)."
+                ),
+                stacklevel=2,
+            )
         results = model.track(
             source=str(video.path),
             stream=True,
@@ -147,6 +157,7 @@ class UltralyticsTrackingProvider(TrackingProvider):
                 mapped[class_id] = ("ball", "ball")
         return {
             "label_map": mapped,
+            "has_goalkeeper_referee_classes": ("goalkeeper" in normalized.values() and "referee" in normalized.values()),
         }
 
     def _filter_tracks(
@@ -226,7 +237,7 @@ class UltralyticsTrackingProvider(TrackingProvider):
 
                 results = model.predict(
                     source=frame,
-                    conf=min(config.detection_confidence, config.min_ball_confidence),
+                    conf=max(0.12, min(config.detection_confidence, config.min_ball_confidence)),
                     iou=config.detection_iou,
                     imgsz=config.ball_detection_imgsz,
                     verbose=False,
@@ -266,7 +277,9 @@ class UltralyticsTrackingProvider(TrackingProvider):
                 merged_by_frame[track.frame_index] = track
 
         for track in dedicated_ball_tracks:
-            merged_by_frame[track.frame_index] = track
+            current = merged_by_frame.get(track.frame_index)
+            if current is None or track.confidence >= current.confidence:
+                merged_by_frame[track.frame_index] = track
 
         return [merged_by_frame[frame_index] for frame_index in sorted(merged_by_frame)]
 

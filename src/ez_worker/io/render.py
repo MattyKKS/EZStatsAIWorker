@@ -149,8 +149,24 @@ def _build_sticky_source_labels(tracks: list[TrackObservation]) -> dict[int, str
         if track.label == "player":
             by_track[int(track.track_id)].append(track)
 
+    goalkeeper_candidates: list[tuple[int, int, float, float]] = []
+    for track_id, obs_list in by_track.items():
+        source_counts = Counter((obs.source_label or obs.label or "player").lower() for obs in obs_list)
+        goalkeeper_votes = int(source_counts.get("goalkeeper", 0))
+        referee_votes = int(source_counts.get("referee", 0))
+        if goalkeeper_votes >= 2 and referee_votes <= goalkeeper_votes:
+            mean_cx = sum(obs.bbox.cx for obs in obs_list) / max(len(obs_list), 1)
+            edge_score = abs(mean_cx - 0.5)
+            ratio = goalkeeper_votes / max(len(obs_list), 1)
+            goalkeeper_candidates.append((track_id, goalkeeper_votes, ratio, edge_score))
+    goalkeeper_candidates.sort(key=lambda row: (row[1], row[2], row[3]), reverse=True)
+    forced_goalkeeper_ids = {row[0] for row in goalkeeper_candidates[:2]}
+
     sticky: dict[int, str] = {}
     for track_id, obs_list in by_track.items():
+        if track_id in forced_goalkeeper_ids:
+            sticky[track_id] = "goalkeeper"
+            continue
         source_counts = Counter((obs.source_label or obs.label or "player").lower() for obs in obs_list)
         total = len(obs_list)
         goalkeeper_votes = int(source_counts.get("goalkeeper", 0))
