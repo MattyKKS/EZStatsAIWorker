@@ -129,6 +129,13 @@ def clean_ball_detections(
     if not balls:
         return tracks
 
+    suspicious_hotspots = _build_suspicious_ball_hotspots(balls)
+
+    players_by_frame: dict[int, list[TrackObservation]] = defaultdict(list)
+    for track in non_balls:
+        if track.label == "player":
+            players_by_frame[track.frame_index].append(track)
+
     balls_by_frame: dict[int, list[TrackObservation]] = defaultdict(list)
     for ball in balls:
         balls_by_frame[ball.frame_index].append(ball.model_copy(update={"track_id": 0}))
@@ -136,6 +143,7 @@ def clean_ball_detections(
     cleaned_balls: list[TrackObservation] = []
     previous_ball: TrackObservation | None = None
     last_ball: TrackObservation | None = None
+    stationary_low_conf_frames = 0
     for frame_index in range(min(balls_by_frame), max(balls_by_frame) + frame_step, frame_step):
         frame_candidates = sorted(
             balls_by_frame.get(frame_index, []),
@@ -145,17 +153,8 @@ def clean_ball_detections(
         if not frame_candidates:
             if last_ball is None:
                 continue
-            gap_frames = frame_index - last_ball.frame_index
-            if 0 < gap_frames <= ball_hold_max_gap_frames:
-                held = last_ball.model_copy(
-                    update={
-                        "frame_index": frame_index,
-                        "confidence": max(0.05, last_ball.confidence * 0.55),
-                    }
-                )
-                cleaned_balls.append(held)
-                previous_ball = last_ball
-                last_ball = held
+            # Tutorial-aligned ball continuity: do not force stale detections through long
+            # carry-forward. Leave short misses to interpolation stage.
             continue
 
         if last_ball is None:
@@ -166,22 +165,75 @@ def clean_ball_detections(
 
         gap_frames = frame_index - last_ball.frame_index
         allowed_jump_px = max_ball_jump_px * max(1.0, gap_frames / max(frame_step, 1))
+        previous_motion_px = _previous_ball_motion_px(previous_ball, last_ball, video)
+        if previous_motion_px > 0.0:
+            allowed_jump_px = max(allowed_jump_px, previous_motion_px * 1.6 + 28.0)
+        if _is_near_frame_edge(last_ball):
+            # Fast transitions near touchline/camera edges are common in broadcast footage.
+            allowed_jump_px *= 1.45
+
         selected = _select_best_ball_candidate(
             frame_candidates,
             previous_ball=previous_ball,
             last_ball=last_ball,
             video=video,
             allowed_jump_px=allowed_jump_px,
+            players=players_by_frame.get(frame_index, []),
+            suspicious_hotspots=suspicious_hotspots,
         )
         if selected is None:
             if gap_frames >= ball_reset_gap_frames:
                 reset_candidate = frame_candidates[0]
-                if reset_candidate.confidence >= ball_reset_confidence:
+                nearest_player_px = _nearest_player_distance_px(
+                    reset_candidate,
+                    players_by_frame.get(frame_index, []),
+                    video,
+                )
+                if (
+                    reset_candidate.confidence >= ball_reset_confidence
+                    and (
+                        nearest_player_px <= 260.0
+                        or reset_candidate.confidence >= 0.70
+                    )
+                ):
                     selected = reset_candidate
                 else:
                     continue
             else:
                 continue
+
+        # Guard against static white-mark false positives (for example penalty spot).
+        nearest_player_px = _nearest_player_distance_px(
+            selected,
+            players_by_frame.get(frame_index, []),
+            video,
+        )
+        motion_px = _ball_motion_px(last_ball, selected, video)
+        if (
+            nearest_player_px > 240.0
+            and motion_px < 12.0
+            and selected.confidence < 0.65
+        ):
+            continue
+
+        if (
+            _is_near_suspicious_hotspot(selected, suspicious_hotspots)
+            and selected.confidence < 0.60
+            and nearest_player_px > 140.0
+            and motion_px < 28.0
+        ):
+            continue
+
+        if (
+            motion_px < 4.0
+            and selected.confidence < 0.20
+            and nearest_player_px > 150.0
+        ):
+            stationary_low_conf_frames += 1
+            if stationary_low_conf_frames > 8:
+                continue
+        else:
+            stationary_low_conf_frames = 0
 
         if last_ball is not None and ball_smoothing_alpha > 0.0:
             selected = _smooth_ball_observation(last_ball, selected, ball_smoothing_alpha)
@@ -190,10 +242,15 @@ def clean_ball_detections(
         previous_ball = last_ball
         last_ball = selected
 
+    cleaned_balls = _suppress_static_false_ball_runs(
+        cleaned_balls,
+        video=video,
+        frame_step=frame_step,
+    )
     cleaned_balls = _interpolate_ball_short_gaps(
         cleaned_balls,
         frame_step=frame_step,
-        max_gap_frames=ball_hold_max_gap_frames,
+        max_gap_frames=max(ball_hold_max_gap_frames, 16),
     )
 
     return sorted(non_balls + cleaned_balls, key=lambda track: (track.frame_index, track.label, track.track_id))
@@ -206,23 +263,43 @@ def _select_best_ball_candidate(
     last_ball: TrackObservation,
     video: VideoMeta,
     allowed_jump_px: float,
+    players: list[TrackObservation],
+    suspicious_hotspots: list[tuple[float, float]],
 ) -> TrackObservation | None:
-    ranked: list[tuple[float, float, float, TrackObservation]] = []
+    ranked: list[tuple[float, float, float, float, TrackObservation]] = []
     predicted_cx, predicted_cy = _predict_ball_center(previous_ball, last_ball)
     for candidate in candidates:
         dx = (candidate.bbox.cx - predicted_cx) * video.width
         dy = (candidate.bbox.cy - predicted_cy) * video.height
         predicted_distance_px = (dx * dx + dy * dy) ** 0.5
         distance_from_last_px = _center_distance_px(last_ball, candidate, video)
-        if min(predicted_distance_px, distance_from_last_px) > allowed_jump_px:
+        candidate_allowed_jump_px = allowed_jump_px
+        if _is_near_frame_edge(last_ball) or _is_near_frame_edge(candidate):
+            candidate_allowed_jump_px *= 1.35
+        if min(predicted_distance_px, distance_from_last_px) > candidate_allowed_jump_px:
             continue
-        ranked.append((predicted_distance_px, distance_from_last_px, -candidate.confidence, candidate))
+        hotspot_penalty = 0.0
+        if _is_near_suspicious_hotspot(candidate, suspicious_hotspots):
+            nearest_player_px = _nearest_player_distance_px(candidate, players, video)
+            if nearest_player_px > 110.0:
+                hotspot_penalty = 120.0
+            elif nearest_player_px > 70.0:
+                hotspot_penalty = 45.0
+        ranked.append(
+            (
+                predicted_distance_px + hotspot_penalty,
+                distance_from_last_px + (hotspot_penalty * 0.5),
+                -candidate.confidence,
+                hotspot_penalty,
+                candidate,
+            )
+        )
 
     if not ranked:
         return None
 
-    ranked.sort(key=lambda item: (item[0], item[1], item[2]))
-    return ranked[0][3]
+    ranked.sort(key=lambda item: (item[0], item[1], item[2], item[3]))
+    return ranked[0][4]
 
 
 def _predict_ball_center(
@@ -239,6 +316,50 @@ def _predict_ball_center(
     vx = (last_ball.bbox.cx - previous_ball.bbox.cx) / frame_delta
     vy = (last_ball.bbox.cy - previous_ball.bbox.cy) / frame_delta
     return last_ball.bbox.cx + vx, last_ball.bbox.cy + vy
+
+
+def _nearest_player_distance_px(
+    ball: TrackObservation,
+    players: list[TrackObservation],
+    video: VideoMeta,
+) -> float:
+    if not players:
+        return float("inf")
+
+    min_distance = float("inf")
+    for player in players:
+        distance = _center_distance_px(ball, player, video)
+        if distance < min_distance:
+            min_distance = distance
+    return min_distance
+
+
+def _ball_motion_px(
+    previous: TrackObservation,
+    current: TrackObservation,
+    video: VideoMeta,
+) -> float:
+    return _center_distance_px(previous, current, video)
+
+
+def _previous_ball_motion_px(
+    previous: TrackObservation | None,
+    last: TrackObservation,
+    video: VideoMeta,
+) -> float:
+    if previous is None:
+        return 0.0
+    return _center_distance_px(previous, last, video)
+
+
+def _is_near_frame_edge(ball: TrackObservation) -> bool:
+    margin = 0.10
+    return (
+        ball.bbox.cx <= margin
+        or ball.bbox.cx >= 1.0 - margin
+        or ball.bbox.cy <= margin
+        or ball.bbox.cy >= 1.0 - margin
+    )
 
 
 def _smooth_ball_observation(
@@ -283,9 +404,109 @@ def _interpolate_ball_short_gaps(
         if gap > frame_step and gap <= max_gap_frames:
             for frame_index in range(prev.frame_index + frame_step, cur.frame_index, frame_step):
                 alpha = (frame_index - prev.frame_index) / max(gap, 1)
-                output.append(_interpolate_observation(prev, cur, frame_index, alpha))
+                output.append(_interpolate_ball_observation(prev, cur, frame_index, alpha))
         output.append(cur)
     return output
+
+
+def _suppress_static_false_ball_runs(
+    balls: list[TrackObservation],
+    *,
+    video: VideoMeta,
+    frame_step: int,
+) -> list[TrackObservation]:
+    if len(balls) <= 2:
+        return balls
+
+    ordered = sorted(balls, key=lambda track: track.frame_index)
+    keep = [True for _ in ordered]
+    run_start = 0
+
+    def flush_run(run_end: int) -> None:
+        run_len = run_end - run_start + 1
+        if run_len < 12:
+            return
+        segment = ordered[run_start : run_end + 1]
+        avg_conf = sum(obs.confidence for obs in segment) / max(run_len, 1)
+        if avg_conf >= 0.20:
+            return
+        # Near-static run means likely false positive marker (for example penalty spot).
+        motions: list[float] = []
+        for prev, cur in zip(segment, segment[1:]):
+            motions.append(_center_distance_px(prev, cur, video))
+        if motions and max(motions) <= 3.0:
+            for idx in range(run_start, run_end + 1):
+                keep[idx] = False
+
+    for idx in range(1, len(ordered)):
+        prev = ordered[idx - 1]
+        cur = ordered[idx]
+        is_contiguous = (cur.frame_index - prev.frame_index) <= frame_step
+        is_static = _center_distance_px(prev, cur, video) <= 3.0
+        if is_contiguous and is_static:
+            continue
+        flush_run(idx - 1)
+        run_start = idx
+
+    flush_run(len(ordered) - 1)
+    return [obs for idx, obs in enumerate(ordered) if keep[idx]]
+
+
+def _build_suspicious_ball_hotspots(
+    balls: list[TrackObservation],
+) -> list[tuple[float, float]]:
+    if not balls:
+        return []
+
+    grouped: dict[tuple[float, float], list[TrackObservation]] = defaultdict(list)
+    for ball in balls:
+        key = (round(ball.bbox.cx, 2), round(ball.bbox.cy, 2))
+        grouped[key].append(ball)
+
+    hotspots: list[tuple[float, float]] = []
+    for (cx, cy), obs_list in grouped.items():
+        if len(obs_list) < 14:
+            continue
+        avg_conf = sum(obs.confidence for obs in obs_list) / max(len(obs_list), 1)
+        if avg_conf <= 0.18:
+            hotspots.append((cx, cy))
+    return hotspots
+
+
+def _is_near_suspicious_hotspot(
+    ball: TrackObservation,
+    hotspots: list[tuple[float, float]],
+) -> bool:
+    if not hotspots:
+        return False
+    for hx, hy in hotspots:
+        dx = ball.bbox.cx - hx
+        dy = ball.bbox.cy - hy
+        if (dx * dx + dy * dy) <= (0.03 * 0.03):
+            return True
+    return False
+
+
+def _interpolate_ball_observation(
+    prev: TrackObservation,
+    cur: TrackObservation,
+    frame_index: int,
+    alpha: float,
+) -> TrackObservation:
+    return prev.model_copy(
+        update={
+            "frame_index": frame_index,
+            "confidence": max(0.12, min(prev.confidence, cur.confidence) * 0.95),
+            "bbox": prev.bbox.model_copy(
+                update={
+                    "x1": _lerp(prev.bbox.x1, cur.bbox.x1, alpha),
+                    "y1": _lerp(prev.bbox.y1, cur.bbox.y1, alpha),
+                    "x2": _lerp(prev.bbox.x2, cur.bbox.x2, alpha),
+                    "y2": _lerp(prev.bbox.y2, cur.bbox.y2, alpha),
+                }
+            ),
+        }
+    )
 
 
 def keep_best_player_tracks(
