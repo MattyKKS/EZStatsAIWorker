@@ -4,6 +4,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 import cv2
+import numpy as np
 
 from ez_worker.schemas import Event, TrackObservation, VideoMeta
 
@@ -80,12 +81,17 @@ def _draw_track(
     if track.label == "ball":
         cx = int(track.bbox.cx * video.width)
         cy = int(track.bbox.cy * video.height)
-        radius = max(6, int(max(x2 - x1, y2 - y1) / 2))
-        cv2.circle(frame, (cx, cy), radius, BALL_COLOR, 2)
+        triangle_height = max(10, int(max(x2 - x1, y2 - y1) * 1.2))
+        triangle_half_width = max(7, int(triangle_height * 0.7))
+        apex = (cx, max(0, cy - triangle_height))
+        left = (max(0, cx - triangle_half_width), max(0, cy - 2))
+        right = (min(video.width - 1, cx + triangle_half_width), max(0, cy - 2))
+        pts = np.array([apex, left, right], dtype=np.int32)
+        cv2.fillConvexPoly(frame, pts, BALL_COLOR)
         cv2.putText(
             frame,
             f"ball {track.confidence:.2f}",
-            (max(0, cx - 30), max(18, cy - 10)),
+            (max(0, cx - 36), max(18, cy - triangle_height - 10)),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.45,
             BALL_COLOR,

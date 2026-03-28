@@ -252,6 +252,13 @@ def clean_ball_detections(
         frame_step=frame_step,
         max_gap_frames=max(ball_hold_max_gap_frames, 16),
     )
+    cleaned_balls = _refine_ball_timeseries_tutorial(
+        cleaned_balls,
+        video=video,
+        frame_step=frame_step,
+        max_gap_frames=max(ball_hold_max_gap_frames, 16),
+        suspicious_hotspots=suspicious_hotspots,
+    )
 
     return sorted(non_balls + cleaned_balls, key=lambda track: (track.frame_index, track.label, track.track_id))
 
@@ -507,6 +514,86 @@ def _interpolate_ball_observation(
             ),
         }
     )
+
+
+def _refine_ball_timeseries_tutorial(
+    balls: list[TrackObservation],
+    *,
+    video: VideoMeta,
+    frame_step: int,
+    max_gap_frames: int,
+    suspicious_hotspots: list[tuple[float, float]],
+) -> list[TrackObservation]:
+    if len(balls) <= 1:
+        return balls
+
+    ordered = sorted(balls, key=lambda track: track.frame_index)
+
+    # 1) Build denser per-frame ball series (tutorial-style interpolation focus).
+    filled: list[TrackObservation] = [ordered[0]]
+    max_fill_gap = max(max_gap_frames * 2, 24)
+    for prev, cur in zip(ordered, ordered[1:]):
+        gap = cur.frame_index - prev.frame_index
+        if gap > frame_step and gap <= max_fill_gap:
+            for frame_index in range(prev.frame_index + frame_step, cur.frame_index, frame_step):
+                alpha = (frame_index - prev.frame_index) / max(gap, 1)
+                interp = _interpolate_ball_observation(prev, cur, frame_index, alpha)
+                # Keep interpolated confidence clearly below strong direct detections.
+                interp = interp.model_copy(update={"confidence": min(interp.confidence, 0.35)})
+                filled.append(interp)
+        filled.append(cur)
+
+    dense = sorted(filled, key=lambda track: track.frame_index)
+
+    # 2) Remove one-frame hotspot toggles (ball -> penalty spot -> ball).
+    hotspot_fixed: list[TrackObservation] = list(dense)
+    for idx in range(1, len(dense) - 1):
+        prev = dense[idx - 1]
+        cur = dense[idx]
+        nxt = dense[idx + 1]
+        if _is_near_suspicious_hotspot(cur, suspicious_hotspots) and cur.confidence < 0.55:
+            if (
+                not _is_near_suspicious_hotspot(prev, suspicious_hotspots)
+                and not _is_near_suspicious_hotspot(nxt, suspicious_hotspots)
+                and _center_distance_px(prev, nxt, video) <= 120.0
+            ):
+                alpha = (cur.frame_index - prev.frame_index) / max(nxt.frame_index - prev.frame_index, 1)
+                hotspot_fixed[idx] = _interpolate_ball_observation(prev, nxt, cur.frame_index, alpha)
+
+    # 3) Light temporal smoothing on center trajectory.
+    smoothed: list[TrackObservation] = []
+    for idx, cur in enumerate(hotspot_fixed):
+        if idx == 0 or idx == len(hotspot_fixed) - 1:
+            smoothed.append(cur)
+            continue
+        prev = hotspot_fixed[idx - 1]
+        nxt = hotspot_fixed[idx + 1]
+        avg_cx = (prev.bbox.cx + cur.bbox.cx + nxt.bbox.cx) / 3.0
+        avg_cy = (prev.bbox.cy + cur.bbox.cy + nxt.bbox.cy) / 3.0
+        shift_x = avg_cx - cur.bbox.cx
+        shift_y = avg_cy - cur.bbox.cy
+        blend = 0.35
+        smoothed.append(
+            cur.model_copy(
+                update={
+                    "bbox": cur.bbox.model_copy(
+                        update={
+                            "x1": cur.bbox.x1 + shift_x * blend,
+                            "y1": cur.bbox.y1 + shift_y * blend,
+                            "x2": cur.bbox.x2 + shift_x * blend,
+                            "y2": cur.bbox.y2 + shift_y * blend,
+                        }
+                    )
+                }
+            )
+        )
+
+    deduped: dict[int, TrackObservation] = {}
+    for obs in smoothed:
+        current = deduped.get(obs.frame_index)
+        if current is None or obs.confidence > current.confidence:
+            deduped[obs.frame_index] = obs
+    return [deduped[idx] for idx in sorted(deduped)]
 
 
 def keep_best_player_tracks(
