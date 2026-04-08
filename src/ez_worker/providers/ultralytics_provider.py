@@ -39,6 +39,14 @@ class UltralyticsTrackingProvider(TrackingProvider):
                 ),
                 stacklevel=2,
             )
+
+        if config.ball_model_name:
+            ball_model = YOLO(config.ball_model_name)
+            ball_model_info = self._build_model_info(ball_model)
+        else:
+            ball_model = model
+            ball_model_info = model_info
+
         results = model.track(
             source=str(video.path),
             stream=True,
@@ -64,11 +72,11 @@ class UltralyticsTrackingProvider(TrackingProvider):
 
         if config.dedicated_ball_pass:
             tracks = self._replace_ball_tracks_with_dedicated_pass(
-                model=model,
+                model=ball_model,
                 tracks=tracks,
                 video=video,
                 config=config,
-                model_label_map=model_info["label_map"],
+                model_label_map=ball_model_info["label_map"],
             )
 
         tracks = self._filter_tracks(tracks, config)

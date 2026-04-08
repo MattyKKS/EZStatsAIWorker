@@ -189,11 +189,17 @@ def clean_ball_detections(
                     players_by_frame.get(frame_index, []),
                     video,
                 )
+                # Lower the reset confidence threshold for detections in the
+                # lower-right area (penalty box angle) where model confidence
+                # is naturally lower but the ball is genuinely present.
+                effective_reset_conf = ball_reset_confidence
+                if reset_candidate.bbox.cx > 0.60 or reset_candidate.bbox.cy > 0.55:
+                    effective_reset_conf = max(0.35, ball_reset_confidence - 0.18)
                 if (
-                    reset_candidate.confidence >= ball_reset_confidence
+                    reset_candidate.confidence >= effective_reset_conf
                     and (
-                        nearest_player_px <= 260.0
-                        or reset_candidate.confidence >= 0.70
+                        nearest_player_px <= 300.0
+                        or reset_candidate.confidence >= 0.65
                     )
                 ):
                     selected = reset_candidate
@@ -360,12 +366,18 @@ def _previous_ball_motion_px(
 
 
 def _is_near_frame_edge(ball: TrackObservation) -> bool:
-    margin = 0.10
+    # Wider margin on right side and bottom: broadcast cameras often show
+    # the right penalty area from an angle where the ball sits in the right
+    # half at mid-height — extend the edge zone so the jump bonus fires earlier.
+    left_margin = 0.10
+    right_margin = 0.25
+    top_margin = 0.10
+    bottom_margin = 0.20
     return (
-        ball.bbox.cx <= margin
-        or ball.bbox.cx >= 1.0 - margin
-        or ball.bbox.cy <= margin
-        or ball.bbox.cy >= 1.0 - margin
+        ball.bbox.cx <= left_margin
+        or ball.bbox.cx >= 1.0 - right_margin
+        or ball.bbox.cy <= top_margin
+        or ball.bbox.cy >= 1.0 - bottom_margin
     )
 
 
@@ -431,17 +443,19 @@ def _suppress_static_false_ball_runs(
 
     def flush_run(run_end: int) -> None:
         run_len = run_end - run_start + 1
-        if run_len < 12:
+        if run_len < 8:
             return
         segment = ordered[run_start : run_end + 1]
         avg_conf = sum(obs.confidence for obs in segment) / max(run_len, 1)
         if avg_conf >= 0.20:
             return
         # Near-static run means likely false positive marker (for example penalty spot).
+        # Use 6.0px threshold (instead of 3.0) to catch slightly jittery spots caused
+        # by video compression or interpolated positions.
         motions: list[float] = []
         for prev, cur in zip(segment, segment[1:]):
             motions.append(_center_distance_px(prev, cur, video))
-        if motions and max(motions) <= 3.0:
+        if motions and max(motions) <= 6.0:
             for idx in range(run_start, run_end + 1):
                 keep[idx] = False
 
@@ -472,7 +486,7 @@ def _build_suspicious_ball_hotspots(
 
     hotspots: list[tuple[float, float]] = []
     for (cx, cy), obs_list in grouped.items():
-        if len(obs_list) < 14:
+        if len(obs_list) < 8:
             continue
         avg_conf = sum(obs.confidence for obs in obs_list) / max(len(obs_list), 1)
         if avg_conf <= 0.18:

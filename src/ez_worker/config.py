@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -9,6 +10,15 @@ class PipelineConfig(BaseModel):
     render_video: bool = Field(default=False)
     output_root: Path = Field(default=Path("outputs"))
     model_name: str = Field(default="yolov8n.pt")
+    ball_model_name: Optional[str] = Field(
+        default=None,
+        description=(
+            "Optional separate model used exclusively for the dedicated ball pass. "
+            "When set, the main model (model_name) handles player/goalkeeper/referee tracking "
+            "and this model handles ball detection at ball_detection_imgsz resolution. "
+            "Train a ball-only YOLO model on detector_ball_only dataset and point here."
+        ),
+    )
     tracker_config: str = Field(default="configs/bytetrack_football.yaml")
     detection_confidence: float = Field(default=0.25, ge=0.0, le=1.0)
     detection_iou: float = Field(default=0.45, ge=0.0, le=1.0)
