@@ -24,6 +24,7 @@ class PipelineConfig(BaseModel):
     detection_iou: float = Field(default=0.45, ge=0.0, le=1.0)
     min_player_confidence: float = Field(default=0.35, ge=0.0, le=1.0)
     min_ball_confidence: float = Field(default=0.15, ge=0.0, le=1.0)
+    detection_imgsz: int = Field(default=1280, ge=320)
     dedicated_ball_pass: bool = Field(default=True)
     ball_detection_imgsz: int = Field(default=1280, ge=320)
     min_track_length: int = Field(default=4, ge=1)

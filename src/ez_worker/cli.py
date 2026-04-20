@@ -43,11 +43,13 @@ def build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--export-player-crops", action="store_true")
     analyze.add_argument("--output-root", type=Path, default=DEFAULT_CONFIG.output_root)
     analyze.add_argument("--model-name", default=DEFAULT_CONFIG.model_name)
+    analyze.add_argument("--ball-model-name", default=DEFAULT_CONFIG.ball_model_name)
     analyze.add_argument("--tracker-config", default=DEFAULT_CONFIG.tracker_config)
     analyze.add_argument("--detection-confidence", type=float, default=DEFAULT_CONFIG.detection_confidence)
     analyze.add_argument("--detection-iou", type=float, default=DEFAULT_CONFIG.detection_iou)
     analyze.add_argument("--min-player-confidence", type=float, default=DEFAULT_CONFIG.min_player_confidence)
     analyze.add_argument("--min-ball-confidence", type=float, default=DEFAULT_CONFIG.min_ball_confidence)
+    analyze.add_argument("--detection-imgsz", type=int, default=DEFAULT_CONFIG.detection_imgsz)
     analyze.add_argument("--ball-detection-imgsz", type=int, default=DEFAULT_CONFIG.ball_detection_imgsz)
     analyze.add_argument("--min-track-length", type=int, default=DEFAULT_CONFIG.min_track_length)
     analyze.add_argument(
@@ -260,11 +262,13 @@ def main() -> None:
             export_player_crops=args.export_player_crops,
             output_root=args.output_root,
             model_name=args.model_name,
+            ball_model_name=args.ball_model_name,
             tracker_config=args.tracker_config,
             detection_confidence=args.detection_confidence,
             detection_iou=args.detection_iou,
             min_player_confidence=args.min_player_confidence,
             min_ball_confidence=args.min_ball_confidence,
+            detection_imgsz=args.detection_imgsz,
             ball_detection_imgsz=args.ball_detection_imgsz,
             min_track_length=args.min_track_length,
             max_player_box_area_fraction=args.max_player_box_area_fraction,

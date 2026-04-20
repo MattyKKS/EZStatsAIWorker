@@ -52,6 +52,7 @@ class UltralyticsTrackingProvider(TrackingProvider):
             stream=True,
             conf=config.detection_confidence,
             iou=config.detection_iou,
+            imgsz=config.detection_imgsz,
             tracker=config.tracker_config,
             persist=True,
             vid_stride=config.frame_step,
