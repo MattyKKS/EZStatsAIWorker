@@ -19,9 +19,29 @@ def export_player_crops(
     if not player_tracks:
         return 0
 
+    # Group by track to select evenly-spaced frames (not just first N)
+    by_track_id: dict[int, list[TrackObservation]] = defaultdict(list)
+    for track in player_tracks:
+        by_track_id[track.track_id].append(track)
+
+    # Select evenly-spaced frame indices across each track's full duration
+    selected_frames: set[int] = set()
+    track_frame_selection: dict[int, list[int]] = {}
+    for track_id, observations in by_track_id.items():
+        observations.sort(key=lambda t: t.frame_index)
+        n = len(observations)
+        k = min(max_crops_per_track, n)
+        if k == 1:
+            chosen = [observations[0].frame_index]
+        else:
+            chosen = [observations[int(i * (n - 1) / (k - 1))].frame_index for i in range(k)]
+        track_frame_selection[track_id] = chosen
+        selected_frames.update(chosen)
+
     by_frame: dict[int, list[TrackObservation]] = defaultdict(list)
     for track in player_tracks:
-        by_frame[track.frame_index].append(track)
+        if track.frame_index in selected_frames:
+            by_frame[track.frame_index].append(track)
 
     selected_counts: dict[int, int] = defaultdict(int)
     crops_dir = output_dir / "player_crops"
@@ -41,6 +61,9 @@ def export_player_crops(
 
             frame_tracks = by_frame.get(frame_index, [])
             for track in frame_tracks:
+                chosen = track_frame_selection.get(track.track_id, [])
+                if frame_index not in chosen:
+                    continue
                 if selected_counts[track.track_id] >= max_crops_per_track:
                     continue
 

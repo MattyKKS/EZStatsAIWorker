@@ -28,6 +28,7 @@ from ez_worker.spatial.homography import apply_pitch_mapping
 from ez_worker.spatial.report import build_spatial_report
 from ez_worker.spatial.heatmap_export import build_heatmap_export
 from ez_worker.spatial.formation_export import build_formation_export
+from ez_worker.io.stats_video import render_stats_video
 from ez_worker.train import train_detector
 
 
@@ -86,6 +87,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--possession-min-consecutive-frames",
         type=int,
         default=DEFAULT_CONFIG.possession_min_consecutive_frames,
+    )
+    analyze.add_argument(
+        "--auto-calibrate",
+        action="store_true",
+        help="Detect penalty marks via OpenCV and suppress false ball detections near them.",
+    )
+    analyze.add_argument(
+        "--event-model-name",
+        default=DEFAULT_CONFIG.event_model_name,
+        help="Path to trained event spotter model (.pt). Falls back to rule-based events if not set.",
     )
 
     init_data = subparsers.add_parser("init-data", help="Create the next-stage data layout.")
@@ -234,6 +245,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_debug.add_argument("--run-dir", type=Path, required=True)
 
+    stats_video = subparsers.add_parser(
+        "render-stats-video",
+        help="Re-render the original video with a team stats overlay in the top-right corner.",
+    )
+    stats_video.add_argument("--run-dir", type=Path, required=True)
+
     train = subparsers.add_parser("train-detector", help="Train the football detector.")
     train.add_argument(
         "--dataset-dir",
@@ -286,6 +303,8 @@ def main() -> None:
             max_crops_per_track=args.max_crops_per_track,
             possession_distance_threshold_px=args.possession_distance_threshold_px,
             possession_min_consecutive_frames=args.possession_min_consecutive_frames,
+            auto_calibrate=args.auto_calibrate,
+            event_model_name=args.event_model_name,
         )
         output_dir = run_analysis(video_path=args.video, config=config)
         print(f"Analysis complete. Outputs written to: {output_dir}")
@@ -409,6 +428,11 @@ def main() -> None:
 
     if args.command == "build-run-debug-report":
         output_path = build_run_debug_report(args.run_dir)
+        print(output_path)
+        return
+
+    if args.command == "render-stats-video":
+        output_path = render_stats_video(args.run_dir)
         print(output_path)
         return
 

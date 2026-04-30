@@ -26,6 +26,7 @@ def cleanup_tracks(
     ball_hold_max_gap_frames: int,
     ball_smoothing_alpha: float,
     drop_ambiguous_ball_frames: bool,
+    penalty_marks: list[tuple[float, float]] | None = None,
 ) -> list[TrackObservation]:
     cleaned = limit_players_per_frame(tracks, max_players_per_frame=max_players_per_frame)
     cleaned = limit_ball_per_frame(cleaned, drop_ambiguous_frames=drop_ambiguous_ball_frames)
@@ -39,6 +40,7 @@ def cleanup_tracks(
             ball_reset_confidence=ball_reset_confidence,
             ball_hold_max_gap_frames=ball_hold_max_gap_frames,
             ball_smoothing_alpha=ball_smoothing_alpha,
+            penalty_marks=penalty_marks or [],
         )
     if merge_tracklets:
         cleaned = merge_player_tracklets(
@@ -123,6 +125,7 @@ def clean_ball_detections(
     ball_reset_confidence: float,
     ball_hold_max_gap_frames: int,
     ball_smoothing_alpha: float,
+    penalty_marks: list[tuple[float, float]] | None = None,
 ) -> list[TrackObservation]:
     balls = [track for track in tracks if track.label == "ball"]
     non_balls = [track for track in tracks if track.label != "ball"]
@@ -221,6 +224,13 @@ def clean_ball_detections(
             and selected.confidence < 0.65
         ):
             continue
+
+        # Hard-reject ball detections that sit on a detected penalty mark and are
+        # not moving — the ball cannot be stationary on the penalty spot for long
+        # during active play without a player nearby.
+        if penalty_marks and _is_near_penalty_mark(selected, penalty_marks, video, radius_px=18.0):
+            if motion_px < 10.0 and selected.confidence < 0.72 and nearest_player_px > 120.0:
+                continue
 
         if (
             _is_near_suspicious_hotspot(selected, suspicious_hotspots)
@@ -492,6 +502,20 @@ def _build_suspicious_ball_hotspots(
         if avg_conf <= 0.18:
             hotspots.append((cx, cy))
     return hotspots
+
+
+def _is_near_penalty_mark(
+    ball: TrackObservation,
+    marks: list[tuple[float, float]],
+    video: VideoMeta,
+    radius_px: float = 18.0,
+) -> bool:
+    for mx, my in marks:
+        dx = (ball.bbox.cx - mx) * video.width
+        dy = (ball.bbox.cy - my) * video.height
+        if (dx * dx + dy * dy) ** 0.5 <= radius_px:
+            return True
+    return False
 
 
 def _is_near_suspicious_hotspot(

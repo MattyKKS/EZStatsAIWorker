@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ez_worker.analytics.events import detect_events
+from ez_worker.analytics.event_spotter import run_event_spotter
 from ez_worker.analytics.stats import build_track_stats
 from ez_worker.config import PipelineConfig
 from ez_worker.io.crops import export_player_crops
@@ -11,6 +12,7 @@ from ez_worker.io.render import render_tracks_video
 from ez_worker.io.video import load_video_meta
 from ez_worker.outputs.writer import write_artifacts
 from ez_worker.postprocess.tracks import cleanup_tracks
+from ez_worker.spatial.line_detector import detect_penalty_marks
 from ez_worker.providers.base import TrackingProvider
 from ez_worker.providers.mock import MockTrackingProvider
 from ez_worker.providers.ultralytics_provider import UltralyticsTrackingProvider
@@ -22,6 +24,15 @@ def run_analysis(video_path: Path, config: PipelineConfig) -> Path:
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = config.output_root / run_id
     provider = _resolve_provider(config.provider)
+
+    penalty_marks: list[tuple[float, float]] = []
+    if config.auto_calibrate:
+        penalty_marks = detect_penalty_marks(video_path)
+        if penalty_marks:
+            print(f"Auto-calibrate: detected {len(penalty_marks)} penalty mark(s): {penalty_marks}")
+        else:
+            print("Auto-calibrate: no penalty marks detected in sample frame.")
+
     provider_artifacts = provider.run(video=video, config=config, output_dir=output_dir)
     tracks = cleanup_tracks(
         provider_artifacts.tracks,
@@ -42,6 +53,7 @@ def run_analysis(video_path: Path, config: PipelineConfig) -> Path:
         ball_hold_max_gap_frames=config.ball_hold_max_gap_frames,
         ball_smoothing_alpha=config.ball_smoothing_alpha,
         drop_ambiguous_ball_frames=config.drop_ambiguous_ball_frames,
+        penalty_marks=penalty_marks if penalty_marks else None,
     )
     events = detect_events(
         tracks=tracks,
@@ -52,6 +64,15 @@ def run_analysis(video_path: Path, config: PipelineConfig) -> Path:
         possession_distance_threshold_px=config.possession_distance_threshold_px,
         possession_min_consecutive_frames=config.possession_min_consecutive_frames,
     )
+    if config.event_model_name:
+        print(f"Running event spotter: {config.event_model_name}")
+        spotter_events = run_event_spotter(
+            video_path=video_path,
+            video=video,
+            model_name=config.event_model_name,
+        )
+        print(f"Event spotter found {len(spotter_events)} events.")
+        events = sorted(events + spotter_events, key=lambda e: e.frame_index)
     stats = build_track_stats(tracks=tracks, events=events, video=video)
 
     processed_video_path = provider_artifacts.processed_video_path
