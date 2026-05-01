@@ -262,6 +262,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Re-render the original video with a team stats overlay in the top-right corner.",
     )
     stats_video.add_argument("--run-dir", type=Path, required=True)
+    stats_video.add_argument(
+        "--pitch-model-path",
+        type=Path,
+        default=None,
+        help="Path to pitch keypoint YOLO model for per-frame homography (optional).",
+    )
+    stats_video.add_argument(
+        "--ball-model-path",
+        type=Path,
+        default=None,
+        help="Path to ball detection YOLO model (optional, auto-discovered if not set).",
+    )
 
     train = subparsers.add_parser("train-detector", help="Train the football detector.")
     train.add_argument(
@@ -450,7 +462,11 @@ def main() -> None:
         return
 
     if args.command == "render-stats-video":
-        output_path = render_stats_video(args.run_dir)
+        output_path = render_stats_video(
+            args.run_dir,
+            pitch_model_path=getattr(args, "pitch_model_path", None),
+            ball_model_path=getattr(args, "ball_model_path", None),
+        )
         print(output_path)
         return
 
