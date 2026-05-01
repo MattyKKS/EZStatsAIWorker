@@ -28,6 +28,76 @@ TEAM_LABELS: dict[int, str] = {0: "TEAM A", 1: "TEAM B", 2: "OTHER"}
 POSSESSION_WINDOW_FRAMES = 75  # ~3 sec look-back at 25fps
 
 
+def _load_team_classifier(run_dir: Path):
+    """Load saved UMAP+KMeans+SigLIP for per-frame prediction."""
+    classifier_path = run_dir / "team_classifier.joblib"
+    if not classifier_path.exists():
+        return None
+    try:
+        import joblib
+        import torch
+        from transformers import AutoProcessor, SiglipVisionModel
+        data = joblib.load(classifier_path)
+        model_name = data.get("model_name", "google/siglip-base-patch16-224")
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"  Per-frame SigLIP using device: {device}")
+        processor = AutoProcessor.from_pretrained(model_name)
+        siglip = SiglipVisionModel.from_pretrained(model_name).to(device)
+        siglip.eval()
+        return {"processor": processor, "siglip": siglip, "reducer": data["reducer"],
+                "km": data["km"], "focus": data.get("focus_upper_body", False),
+                "torch": torch, "device": device}
+    except Exception as e:
+        print(f"  Warning: could not load team classifier for per-frame prediction: {e}")
+        return None
+
+
+def _predict_frame_teams(clf, frame: np.ndarray, frame_tracks: list, video) -> dict[int, int]:
+    """Predict team per player crop in this frame — tutorial's per-frame approach."""
+    if not frame_tracks:
+        return {}
+    from PIL import Image as PILImage
+
+    crops, tids = [], []
+    for track in frame_tracks:
+        if track.label != "player":
+            continue
+        x1 = max(0, int(track.bbox.x1 * video.width))
+        y1 = max(0, int(track.bbox.y1 * video.height))
+        x2 = min(video.width, int(track.bbox.x2 * video.width))
+        y2 = min(video.height, int(track.bbox.y2 * video.height))
+        if x2 <= x1 or y2 <= y1:
+            continue
+        crop_bgr = frame[y1:y2, x1:x2]
+        if crop_bgr.size == 0:
+            continue
+        img = PILImage.fromarray(cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB))
+        if clf["focus"]:
+            w, h = img.size
+            img = img.crop((int(w * 0.15), 0, int(w * 0.85), int(h * 0.55)))
+        crops.append(img)
+        tids.append(track.track_id)
+
+    if not crops:
+        return {}
+
+    torch = clf["torch"]
+    device = clf.get("device", "cpu")
+    with torch.no_grad():
+        inputs = clf["processor"](images=crops, return_tensors="pt")
+        inputs = {k: v.to(device) for k, v in inputs.items()}
+        outputs = clf["siglip"](**inputs)
+        embeddings = outputs.last_hidden_state.mean(dim=1).cpu().numpy()
+
+    if clf["reducer"] is not None:
+        projections = clf["reducer"].transform(embeddings)
+    else:
+        projections = embeddings
+
+    labels = clf["km"].predict(projections)
+    return {tid: int(label) for tid, label in zip(tids, labels)}
+
+
 def render_stats_video(run_dir: Path) -> Path:
     run_dir = run_dir.resolve()
     summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
@@ -62,6 +132,7 @@ def render_stats_video(run_dir: Path) -> Path:
         height=video_meta_raw["height"],
     )
 
+    # Static fallback team assignments from clustering
     team_id_by_track = {t.track_id: t.team_id for t in tracks if t.team_id is not None}
     team_stats = _compute_team_stats(raw_stats, team_id_by_track)
     possession_by_frame = _compute_possession_by_frame(events, video.frame_count, team_id_by_track)
@@ -73,6 +144,32 @@ def render_stats_video(run_dir: Path) -> Path:
     for e in events:
         events_by_frame[e.frame_index].append(e)
     sticky_source = _build_sticky_source_labels(tracks)
+
+    # Load per-frame classifier (tutorial approach — eliminates overlap team switches)
+    clf = _load_team_classifier(run_dir)
+    if clf:
+        print("  Per-frame team prediction enabled (tutorial approach)")
+    else:
+        print("  Using static team assignments (run cluster-teams to enable per-frame)")
+
+    # Load pitch homography for minimap
+    transformer = None
+    keypoints_path = run_dir / "pitch_keypoints.json"
+    if keypoints_path.exists():
+        try:
+            from ez_worker.spatial.view_transformer import ViewTransformer
+            from ez_worker.spatial.keypoint_detector import KEYPOINT_PITCH_XY_M
+            kp_data = json.loads(keypoints_path.read_text(encoding="utf-8"))
+            kp_px = kp_data.get("keypoints", {})
+            kp_m = kp_data.get("keypoint_pitch_xy_m", {})
+            common = [k for k in kp_px if k in kp_m]
+            if len(common) >= 4:
+                src = np.array([kp_px[k] for k in common], dtype=np.float32)
+                dst = np.array([kp_m[k] for k in common], dtype=np.float32)
+                transformer = ViewTransformer(src, dst)
+                print(f"  Minimap enabled ({len(common)} keypoints)")
+        except Exception as e:
+            print(f"  Minimap skipped: {e}")
 
     output_path = run_dir / "stats_video.mp4"
     cap = cv2.VideoCapture(str(video_path))
@@ -92,12 +189,42 @@ def render_stats_video(run_dir: Path) -> Path:
             ok, frame = cap.read()
             if not ok:
                 break
-            for track in tracks_by_frame.get(frame_index, []):
-                _draw_track_with_team(frame, track, video, sticky_source, team_id_by_track)
+
+            frame_tracks = tracks_by_frame.get(frame_index, [])
+
+            # Per-frame prediction overrides static assignment — tutorial approach
+            if clf and frame_tracks:
+                live_teams = _predict_frame_teams(clf, frame, frame_tracks, video)
+                frame_team_lookup = {**team_id_by_track, **live_teams}
+            else:
+                frame_team_lookup = team_id_by_track
+
+            for track in frame_tracks:
+                _draw_track_with_team(frame, track, video, sticky_source, frame_team_lookup)
             for event in events_by_frame.get(frame_index, []):
                 _draw_event_label(frame, event)
             poss = possession_by_frame.get(frame_index, {})
             _draw_stats_panel(frame, team_stats, poss, has_teams)
+
+            # Minimap overlay
+            if transformer is not None:
+                try:
+                    from ez_worker.spatial.minimap import draw_minimap, overlay_minimap
+                    positions_m, t_ids = [], []
+                    for track in frame_tracks:
+                        if track.label != "player":
+                            continue
+                        bx = (track.bbox.x1 + track.bbox.x2) / 2 * video.width
+                        by = track.bbox.y2 * video.height
+                        pt_m = transformer.transform_points(np.array([[bx, by]]))[0]
+                        positions_m.append((float(pt_m[0]), float(pt_m[1])))
+                        t_ids.append(frame_team_lookup.get(track.track_id))
+                    if positions_m:
+                        minimap = draw_minimap(positions_m, t_ids)
+                        frame = overlay_minimap(frame, minimap)
+                except Exception:
+                    pass
+
             writer.write(frame)
             frame_index += 1
     finally:

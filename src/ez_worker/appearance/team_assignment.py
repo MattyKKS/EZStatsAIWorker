@@ -149,14 +149,17 @@ def _siglip_cluster_by_crop(
             "SigLIP dependencies are not installed. Run 'pip install -e .[appearance]'."
         ) from exc
 
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"  SigLIP using device: {device}")
     processor = AutoProcessor.from_pretrained(model_name)
-    siglip = SiglipVisionModel.from_pretrained(model_name)
+    siglip = SiglipVisionModel.from_pretrained(model_name).to(device)
     siglip.eval()
 
     valid_track_ids = {t["track_id"] for t in tracks}
 
     def _embed_pil(img: "Image.Image") -> np.ndarray:
         inputs = processor(images=img, return_tensors="pt")
+        inputs = {k: v.to(device) for k, v in inputs.items()}
         with torch.no_grad():
             out = siglip(**inputs)
         return out.last_hidden_state.mean(dim=1).squeeze(0).cpu().numpy()
@@ -244,6 +247,17 @@ def _siglip_cluster_by_crop(
     from sklearn.cluster import KMeans
     km = KMeans(n_clusters=cluster_count, random_state=42, n_init=10)
     km.fit(fit_proj)
+
+    # Save fitted model so render-stats-video can do per-frame prediction
+    try:
+        import joblib
+        joblib.dump(
+            {"reducer": reducer, "km": km, "model_name": model_name, "focus_upper_body": focus_upper_body},
+            run_dir / "team_classifier.joblib",
+        )
+        print(f"  Saved team classifier → {run_dir / 'team_classifier.joblib'}")
+    except Exception as e:
+        print(f"  Warning: could not save team classifier: {e}")
 
     # --- Phase 2: predict per saved track crop, majority-vote per track ---
     track_id_order = [t["track_id"] for t in tracks]

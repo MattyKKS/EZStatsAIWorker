@@ -33,6 +33,8 @@ if (-not $?) { Write-Error "cluster-teams failed"; exit 1 }
 ez-worker apply-team-clusters --run-dir $runDir
 if (-not $?) { Write-Error "apply-team-clusters failed"; exit 1 }
 
+ez-worker detect-pitch-keypoints --run-dir $runDir --model-path artifacts/pitch/football-pitch-detection.pt
+if (-not $?) { Write-Warning "detect-pitch-keypoints failed — minimap will be skipped" }
 
 ez-worker render-stats-video --run-dir $runDir
 if (-not $?) { Write-Error "render-stats-video failed"; exit 1 }

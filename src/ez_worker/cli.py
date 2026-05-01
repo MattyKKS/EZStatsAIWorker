@@ -209,6 +209,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     route_manifest.add_argument("--run-dir", type=Path, required=True)
 
+    detect_kp = subparsers.add_parser(
+        "detect-pitch-keypoints",
+        help="Auto-detect pitch keypoints from video using YOLO keypoint model.",
+    )
+    detect_kp.add_argument("--run-dir", type=Path, required=True)
+    detect_kp.add_argument(
+        "--model-path",
+        type=Path,
+        default=None,
+    )
+    detect_kp.add_argument("--api-key", default=None, help="Roboflow API key for cloud inference.")
+
     pitch_prep = subparsers.add_parser(
         "prepare-pitch-mapping",
         help="Create a reference frame and manual template for later pitch homography work.",
@@ -398,6 +410,12 @@ def main() -> None:
 
     if args.command == "build-route-manifest":
         output_path = build_route_manifest(args.run_dir)
+        print(output_path)
+        return
+
+    if args.command == "detect-pitch-keypoints":
+        from ez_worker.spatial.keypoint_detector import detect_pitch_keypoints
+        output_path = detect_pitch_keypoints(args.run_dir, args.model_path, api_key=getattr(args, "api_key", None))
         print(output_path)
         return
 
