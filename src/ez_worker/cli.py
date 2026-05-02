@@ -274,6 +274,17 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Path to ball detection YOLO model (optional, auto-discovered if not set).",
     )
+    stats_video.add_argument(
+        "--player-model-path",
+        type=Path,
+        default=None,
+        help="Path to player/GK/referee YOLO model (optional, auto-discovers baseline if not set).",
+    )
+    stats_video.add_argument(
+        "--show-keypoints",
+        action="store_true",
+        help="Draw detected pitch keypoints (dots + edges) on the video for debugging.",
+    )
 
     train = subparsers.add_parser("train-detector", help="Train the football detector.")
     train.add_argument(
@@ -466,6 +477,8 @@ def main() -> None:
             args.run_dir,
             pitch_model_path=getattr(args, "pitch_model_path", None),
             ball_model_path=getattr(args, "ball_model_path", None),
+            player_model_path=getattr(args, "player_model_path", None),
+            show_keypoints=getattr(args, "show_keypoints", False),
         )
         print(output_path)
         return

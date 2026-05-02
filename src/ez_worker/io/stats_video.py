@@ -3,24 +3,27 @@ from __future__ import annotations
 import json
 from collections import defaultdict
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import cv2
 import numpy as np
 import supervision as sv
+from tqdm import tqdm
 
-from ez_worker.io.render import _build_sticky_source_labels
 from ez_worker.schemas import BBox, Event, TrackObservation, VideoMeta
 
 
-# Tutorial-exact colours: team A (pink), team B (blue), goalkeeper-fallback (orange), referee (gold)
-TUTORIAL_COLORS = ['#FF1493', '#00BFFF', '#FF6347', '#FFD700']
+# Tutorial-exact constants
+BALL_CLASS_ID = 0
+GOALKEEPER_CLASS_ID = 1
+PLAYER_CLASS_ID = 2
+REFEREE_CLASS_ID = 3
+STRIDE = 60
 
-TEAM_COLOR_HEX = {0: '#FF1493', 1: '#00BFFF'}  # team A, team B
-REFEREE_COLOR_IDX = 3    # maps to '#FFD700'
+COLORS = ['#FF1493', '#00BFFF', '#FF6347', '#FFD700']
+REFEREE_COLOR_IDX = 3
 
-# Supervision annotators — created once, reused every frame (tutorial style)
-_COLOR_PALETTE = sv.ColorPalette.from_hex(TUTORIAL_COLORS)
+_COLOR_PALETTE = sv.ColorPalette.from_hex(COLORS)
 ELLIPSE_ANNOTATOR = sv.EllipseAnnotator(color=_COLOR_PALETTE, thickness=2)
 ELLIPSE_LABEL_ANNOTATOR = sv.LabelAnnotator(
     color=_COLOR_PALETTE,
@@ -30,7 +33,7 @@ ELLIPSE_LABEL_ANNOTATOR = sv.LabelAnnotator(
     text_position=sv.Position.BOTTOM_CENTER,
 )
 
-POSSESSION_WINDOW_FRAMES = 75  # ~3 sec look-back at 25fps
+POSSESSION_WINDOW_FRAMES = 75
 
 TEAM_COLORS_BGR: dict[int, tuple[int, int, int]] = {
     0: (220, 80, 60),
@@ -40,14 +43,10 @@ TEAM_COLORS_BGR: dict[int, tuple[int, int, int]] = {
 
 
 # ---------------------------------------------------------------------------
-# Ball annotator using saved track data (used until dedicated model is ready)
+# Ball annotator using saved track data (fallback when no dedicated model)
 # ---------------------------------------------------------------------------
 
 class _SavedBallAnnotator:
-    """
-    Replicates BallAnnotator trail effect using ball positions from saved tracks.
-    Keeps last 10 positions and draws circles growing in size toward current frame.
-    """
     def __init__(self, radius: int = 6, buffer_size: int = 10) -> None:
         from collections import deque
         self._buf: deque = deque(maxlen=buffer_size)
@@ -58,100 +57,29 @@ class _SavedBallAnnotator:
             self._palette = None
 
     def update(self, frame: np.ndarray, xy: np.ndarray | None) -> np.ndarray:
-        """xy: (1, 2) pixel position or None if ball not seen this frame."""
         self._buf.append(xy)
         for i, pos in enumerate(self._buf):
             if pos is None:
                 continue
             r = max(1, int(1 + i * (self.radius - 1) / max(len(self._buf) - 1, 1)))
             color = self._palette.by_idx(i).as_bgr() if self._palette else (0, 255, 255)
-            cx, cy = int(pos[0]), int(pos[1])
-            cv2.circle(frame, (cx, cy), r, color, 2)
+            cv2.circle(frame, (int(pos[0]), int(pos[1])), r, color, 2)
         return frame
 
-    def get_last_xy(self) -> np.ndarray | None:
-        for pos in reversed(self._buf):
-            if pos is not None:
-                return pos
-        return None
-
 
 # ---------------------------------------------------------------------------
-# Per-frame pitch homography (tutorial: rebuild every frame)
-# ---------------------------------------------------------------------------
-
-class _PitchHomographyTracker:
-    """
-    Runs the YOLO pitch-keypoint model every frame and rebuilds the transformer
-    exactly as the tutorial does: fresh ViewTransformer each frame, no RANSAC,
-    no smoothing buffer.
-    """
-
-    def __init__(self, model_path: Path, vertices: list) -> None:
-        try:
-            from ultralytics import YOLO
-        except ImportError as exc:
-            raise RuntimeError("ultralytics not installed") from exc
-        import torch
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.model = YOLO(str(model_path))
-        self.model.to(device)
-        self.vertices = np.array(vertices, dtype=np.float32)
-        self._last_transformer = None
-
-    def update(self, frame: np.ndarray):
-        """Tutorial-exact: detect keypoints, mask invisible ones, build fresh transformer."""
-        from sports.common.view import ViewTransformer
-        result = self.model(frame, verbose=False)[0]
-        keypoints = sv.KeyPoints.from_ultralytics(result)
-
-        if keypoints.xy is None or len(keypoints.xy) == 0:
-            return self._last_transformer
-
-        kp_xy = keypoints.xy[0]  # shape (32, 2)
-        mask = (kp_xy[:, 0] > 1) & (kp_xy[:, 1] > 1)
-
-        if mask.sum() < 4:
-            return self._last_transformer
-
-        try:
-            transformer = ViewTransformer(
-                source=kp_xy[mask].astype(np.float32),
-                target=self.vertices[mask],
-            )
-            self._last_transformer = transformer
-        except ValueError:
-            pass  # homography failed, keep last good one
-
-        return self._last_transformer
-
-
-# ---------------------------------------------------------------------------
-# Ball detection (tutorial: BallTracker + InferenceSlicer)
+# Ball detector (tutorial: BallTracker + InferenceSlicer)
 # ---------------------------------------------------------------------------
 
 class _BallDetector:
-    """
-    Ball detector matching tutorial exactly:
-    - sv.InferenceSlicer with slice_wh=(640, 640)
-    - .with_nms(threshold=0.1)
-    - BallTracker(buffer_size=20)
-    - BallAnnotator(radius=6, buffer_size=10)
-    """
-
     def __init__(self, model_path: Path) -> None:
-        try:
-            from ultralytics import YOLO
-        except ImportError as exc:
-            raise RuntimeError("ultralytics not installed") from exc
+        from ultralytics import YOLO
         import torch
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        self._model = YOLO(str(model_path))
-        self._model.to(device)
+        self._model = YOLO(str(model_path)).to(device)
         from sports.common.ball import BallTracker, BallAnnotator
         self.tracker = BallTracker(buffer_size=20)
         self.annotator = BallAnnotator(radius=6, buffer_size=10)
-        self._device = device
 
         def _callback(image_slice: np.ndarray) -> sv.Detections:
             result = self._model(image_slice, imgsz=640, verbose=False)[0]
@@ -171,159 +99,97 @@ class _BallDetector:
 
 
 # ---------------------------------------------------------------------------
-# Per-frame team classifier (SigLIP — loads from team_classifier.joblib)
+# Tutorial-exact helpers (copied from examples/soccer/main.py)
 # ---------------------------------------------------------------------------
 
-def _load_team_classifier(run_dir: Path):
-    classifier_path = run_dir / "team_classifier.joblib"
-    if not classifier_path.exists():
-        return None
-    try:
-        import joblib
-        import torch
-        from transformers import AutoProcessor, SiglipVisionModel
-        data = joblib.load(classifier_path)
-        model_name = data.get("model_name", "google/siglip-base-patch16-224")
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"  Per-frame SigLIP using device: {device}")
-        processor = AutoProcessor.from_pretrained(model_name)
-        siglip = SiglipVisionModel.from_pretrained(model_name).to(device)
-        siglip.eval()
-        return {"processor": processor, "siglip": siglip, "reducer": data["reducer"],
-                "km": data["km"], "focus": data.get("focus_upper_body", False),
-                "torch": torch, "device": device}
-    except Exception as e:
-        print(f"  Warning: could not load team classifier: {e}")
-        return None
+def get_crops(frame: np.ndarray, detections: sv.Detections) -> List[np.ndarray]:
+    return [sv.crop_image(frame, xyxy) for xyxy in detections.xyxy]
 
 
-def _predict_frame_teams(clf, frame: np.ndarray, frame_tracks: list, video) -> dict[int, int]:
-    if not frame_tracks:
-        return {}
-    from PIL import Image as PILImage
-    crops, tids = [], []
-    for track in frame_tracks:
-        if track.label != "player":
-            continue
-        x1 = max(0, int(track.bbox.x1 * video.width))
-        y1 = max(0, int(track.bbox.y1 * video.height))
-        x2 = min(video.width, int(track.bbox.x2 * video.width))
-        y2 = min(video.height, int(track.bbox.y2 * video.height))
-        if x2 <= x1 or y2 <= y1:
-            continue
-        crop_bgr = frame[y1:y2, x1:x2]
-        if crop_bgr.size == 0:
-            continue
-        img = PILImage.fromarray(cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB))
-        if clf["focus"]:
-            w, h = img.size
-            img = img.crop((int(w * 0.15), 0, int(w * 0.85), int(h * 0.55)))
-        crops.append(img)
-        tids.append(track.track_id)
-    if not crops:
-        return {}
-    torch = clf["torch"]
-    device = clf.get("device", "cpu")
-    with torch.no_grad():
-        inputs = clf["processor"](images=crops, return_tensors="pt")
-        inputs = {k: v.to(device) for k, v in inputs.items()}
-        outputs = clf["siglip"](**inputs)
-        embeddings = outputs.last_hidden_state.mean(dim=1).cpu().numpy()
-    projections = clf["reducer"].transform(embeddings) if clf["reducer"] is not None else embeddings
-    labels = clf["km"].predict(projections)
-    return {tid: int(label) for tid, label in zip(tids, labels)}
-
-
-# ---------------------------------------------------------------------------
-# Frame entity builder + goalkeeper team resolution (tutorial approach)
-# ---------------------------------------------------------------------------
-
-def _resolve_gk_teams(
-    player_entries: list,        # list of (track_id, x1, y1, x2, y2)
+def resolve_goalkeepers_team_id(
+    players: sv.Detections,
     players_team_id: np.ndarray,
-    gk_entries: list,
-    video,
+    goalkeepers: sv.Detections,
 ) -> np.ndarray:
-    """
-    Assign each goalkeeper to nearest team centroid, matching tutorial's
-    resolve_goalkeepers_team_id exactly.
-    """
-    if not gk_entries:
+    if len(goalkeepers) == 0:
         return np.array([], dtype=int)
-    if not player_entries or len(players_team_id) == 0:
-        return np.zeros(len(gk_entries), dtype=int)
-
-    def bottom_center(e):
-        bx = (e[1] + e[3]) / 2
-        by = e[4]
-        return np.array([bx, by])
-
-    players_xy = np.array([bottom_center(e) for e in player_entries])
+    goalkeepers_xy = goalkeepers.get_anchors_coordinates(sv.Position.BOTTOM_CENTER)
+    players_xy = players.get_anchors_coordinates(sv.Position.BOTTOM_CENTER)
     team_0_xy = players_xy[players_team_id == 0]
     team_1_xy = players_xy[players_team_id == 1]
-
     if len(team_0_xy) == 0 or len(team_1_xy) == 0:
-        return np.zeros(len(gk_entries), dtype=int)
+        return np.zeros(len(goalkeepers), dtype=int)
+    team_0_centroid = team_0_xy.mean(axis=0)
+    team_1_centroid = team_1_xy.mean(axis=0)
+    goalkeepers_team_id = []
+    for gk_xy in goalkeepers_xy:
+        dist_0 = np.linalg.norm(gk_xy - team_0_centroid)
+        dist_1 = np.linalg.norm(gk_xy - team_1_centroid)
+        goalkeepers_team_id.append(0 if dist_0 < dist_1 else 1)
+    return np.array(goalkeepers_team_id)
 
-    c0 = team_0_xy.mean(axis=0)
-    c1 = team_1_xy.mean(axis=0)
 
-    result = []
-    for e in gk_entries:
-        pos = bottom_center(e)
-        result.append(0 if np.linalg.norm(pos - c0) < np.linalg.norm(pos - c1) else 1)
-    return np.array(result, dtype=int)
+def render_radar(
+    detections: sv.Detections,
+    keypoints: sv.KeyPoints,
+    color_lookup: np.ndarray,
+    config,
+    ball_xy_px: Optional[np.ndarray] = None,
+) -> Optional[np.ndarray]:
+    """Tutorial-exact radar: builds fresh ViewTransformer from live keypoints each frame."""
+    from sports.annotators.soccer import draw_pitch, draw_points_on_pitch
+    from sports.common.view import ViewTransformer
 
+    if keypoints.xy is None or len(keypoints.xy) == 0:
+        return None
 
-def _build_frame_detections(
-    frame_tracks: list,
-    sticky_source: dict,
-    frame_team_lookup: dict,
-    video,
-) -> Tuple[sv.Detections, np.ndarray, list, list, list, list]:
-    """
-    Build supervision Detections + tutorial-style color_lookup for this frame.
-    Returns: (all_dets, color_lookup, labels, player_entries, gk_entries, ref_entries)
-    """
-    player_entries, gk_entries, ref_entries = [], [], []
+    # Filter by position > 1px (tutorial) AND by confidence (our addition:
+    # the pitch model returns low-confidence guesses for unseen keypoints — these
+    # skew findHomography and pull far-side players toward the centre of the radar)
+    pos_mask = (keypoints.xy[0][:, 0] > 1) & (keypoints.xy[0][:, 1] > 1)
+    if keypoints.confidence is not None and len(keypoints.confidence) > 0:
+        conf_mask = keypoints.confidence[0] > 0.5
+        mask = pos_mask & conf_mask
+    else:
+        mask = pos_mask
 
-    for t in frame_tracks:
-        if t.label == "ball":
-            continue
-        sticky = sticky_source.get(int(t.track_id), t.source_label or t.label or "player")
-        x1 = t.bbox.x1 * video.width
-        y1 = t.bbox.y1 * video.height
-        x2 = t.bbox.x2 * video.width
-        y2 = t.bbox.y2 * video.height
-        entry = (t.track_id, x1, y1, x2, y2)
-        if sticky == "referee":
-            ref_entries.append(entry)
-        elif sticky == "goalkeeper":
-            gk_entries.append(entry)
-        else:
-            player_entries.append(entry)
+    if mask.sum() < 6:
+        return None
+    try:
+        transformer = ViewTransformer(
+            source=keypoints.xy[0][mask].astype(np.float32),
+            target=np.array(config.vertices)[mask].astype(np.float32),
+        )
+    except Exception:
+        return None
 
-    players_team_id = np.array(
-        [frame_team_lookup.get(e[0], 0) for e in player_entries], dtype=int)
-    gk_team_id = _resolve_gk_teams(player_entries, players_team_id, gk_entries, video)
+    radar = draw_pitch(config=config)
 
-    color_lookup = np.array(
-        players_team_id.tolist() +
-        gk_team_id.tolist() +
-        [REFEREE_COLOR_IDX] * len(ref_entries),
-        dtype=int,
-    )
+    if len(detections) > 0:
+        xy = detections.get_anchors_coordinates(anchor=sv.Position.BOTTOM_CENTER)
+        transformed_xy = transformer.transform_points(points=xy)
+        for idx, color_hex in enumerate(COLORS):
+            mask_c = color_lookup == idx
+            if mask_c.any():
+                radar = draw_points_on_pitch(
+                    config=config,
+                    xy=transformed_xy[mask_c],
+                    face_color=sv.Color.from_hex(color_hex),
+                    radius=20,
+                    pitch=radar,
+                )
 
-    all_entries = player_entries + gk_entries + ref_entries
-    labels = [str(e[0]) for e in all_entries]
+    if ball_xy_px is not None:
+        ball_cm = transformer.transform_points(ball_xy_px[np.newaxis].astype(np.float32))
+        radar = draw_points_on_pitch(
+            config=config,
+            xy=ball_cm,
+            face_color=sv.Color.from_hex('#FFFFFF'),
+            radius=15,
+            pitch=radar,
+        )
 
-    if not all_entries:
-        return sv.Detections.empty(), np.array([], dtype=int), [], [], [], []
-
-    xyxy = np.array([[e[1], e[2], e[3], e[4]] for e in all_entries])
-    tids = np.array([e[0] for e in all_entries])
-    all_dets = sv.Detections(xyxy=xyxy, tracker_id=tids)
-    return all_dets, color_lookup, labels, player_entries, gk_entries, ref_entries
+    return radar
 
 
 # ---------------------------------------------------------------------------
@@ -334,7 +200,14 @@ def render_stats_video(
     run_dir: Path,
     pitch_model_path: Optional[Path] = None,
     ball_model_path: Optional[Path] = None,
+    player_model_path: Optional[Path] = None,
+    show_keypoints: bool = False,
 ) -> Path:
+    import torch
+    from ultralytics import YOLO
+    from sports.common.team import TeamClassifier
+    from sports.configs.soccer import SoccerPitchConfiguration
+
     run_dir = run_dir.resolve()
     summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
     video_path = Path(summary["video_path"])
@@ -367,6 +240,7 @@ def render_stats_video(
         height=video_meta_raw["height"],
     )
 
+    # Pre-computed data used only for stats panel and events
     team_id_by_track = {t.track_id: t.team_id for t in tracks if t.team_id is not None}
     team_stats = _compute_team_stats(raw_stats, team_id_by_track)
     possession_by_frame = _compute_possession_by_frame(events, video.frame_count, team_id_by_track)
@@ -377,79 +251,85 @@ def render_stats_video(
     events_by_frame: dict[int, list[Event]] = defaultdict(list)
     for e in events:
         events_by_frame[e.frame_index].append(e)
-    sticky_source = _build_sticky_source_labels(tracks)
 
-    # Per-frame team classifier
-    clf = _load_team_classifier(run_dir)
-    if clf:
-        print("  Per-frame team prediction enabled (SigLIP)")
-    else:
-        print("  Using static team assignments (run cluster-teams to enable per-frame)")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"  Device: {device}")
 
-    # Per-frame pitch homography — tutorial: every frame, no stride
-    pitch_tracker = None
+    # Player model (auto-discover baseline)
+    _candidate_player = [player_model_path] if player_model_path else []
+    _candidate_player += [Path("artifacts/training/roboflow_detector_v1_light/weights/best.pt")]
+    player_model = None
+    for p in _candidate_player:
+        if p is not None and Path(p).exists():
+            player_model = YOLO(str(p)).to(device)
+            print(f"  Player model: {p}")
+            break
+    if player_model is None:
+        raise RuntimeError("Player model not found — pass --player-model-path or add to artifacts/")
+
+    # Pitch model
+    pitch_model = None
     radar_config = None
     _candidate_pitch = [pitch_model_path] if pitch_model_path else []
     _candidate_pitch += [
+        Path("artifacts/pitch/football-pitch-detectionV2.pt"),
         Path("artifacts/pitch/football-pitch-detection.pt"),
-        Path("artifacts/pitch/best.pt"),
     ]
-    for _mp in _candidate_pitch:
-        if _mp is not None and Path(_mp).exists():
-            try:
-                from sports.configs.soccer import SoccerPitchConfiguration
-                radar_config = SoccerPitchConfiguration()
-                pitch_tracker = _PitchHomographyTracker(Path(_mp), radar_config.vertices)
-                print(f"  Per-frame pitch homography enabled: {_mp}")
-                break
-            except Exception as e:
-                print(f"  Pitch tracker init failed ({_mp}): {e}")
+    for p in _candidate_pitch:
+        if p is not None and Path(p).exists():
+            pitch_model = YOLO(str(p)).to(device)
+            radar_config = SoccerPitchConfiguration()
+            print(f"  Pitch model: {p}")
+            break
+    if pitch_model is None:
+        print("  Warning: no pitch model found — radar disabled")
 
-    # Static fallback from saved pitch_keypoints.json
-    static_transformer = None
-    if pitch_tracker is None:
-        keypoints_path = run_dir / "pitch_keypoints.json"
-        if keypoints_path.exists():
-            try:
-                from ez_worker.spatial.view_transformer import ViewTransformer
-                from sports.configs.soccer import SoccerPitchConfiguration
-                kp_data = json.loads(keypoints_path.read_text(encoding="utf-8"))
-                kp_px = kp_data.get("keypoints", {})
-                kp_cm = kp_data.get("keypoint_pitch_xy_cm", {})
-                common = [k for k in kp_px if k in kp_cm]
-                if len(common) >= 4:
-                    src = np.array([kp_px[k] for k in common], dtype=np.float32)
-                    dst = np.array([kp_cm[k] for k in common], dtype=np.float32)
-                    static_transformer = ViewTransformer(src, dst)
-                    radar_config = SoccerPitchConfiguration()
-                    print(f"  Static minimap fallback ({len(common)} keypoints) — pass pitch model for per-frame")
-            except Exception as e:
-                print(f"  Minimap skipped: {e}")
+    # Keypoint debug annotators (created once, used per-frame when show_keypoints=True)
+    kp_vertex_annotator = None
+    kp_edge_annotator = None
+    if show_keypoints and radar_config is not None:
+        kp_vertex_annotator = sv.VertexLabelAnnotator(
+            color=[sv.Color.from_hex(c) for c in radar_config.colors],
+            text_color=sv.Color.from_hex('#FFFFFF'),
+            border_radius=5,
+            text_thickness=1,
+            text_scale=0.5,
+            text_padding=5,
+        )
+        kp_edge_annotator = sv.EdgeAnnotator(
+            color=sv.Color.from_hex('#FF1493'),
+            thickness=2,
+            edges=radar_config.edges,
+        )
 
-    # Ball detector (tutorial: BallTracker + InferenceSlicer)
+    # Tutorial-exact pre-loop: collect player crops at stride=60, fit TeamClassifier
+    print(f"  Collecting player crops at stride={STRIDE} for team classification...")
+    team_classifier = TeamClassifier(device=device)
+    crops: List[np.ndarray] = []
+    for frame in tqdm(sv.get_video_frames_generator(str(video_path), stride=STRIDE), desc='crops'):
+        result = player_model(frame, imgsz=1280, verbose=False)[0]
+        dets = sv.Detections.from_ultralytics(result)
+        crops += get_crops(frame, dets[dets.class_id == PLAYER_CLASS_ID])
+    team_classifier.fit(crops)
+    print(f"  TeamClassifier fitted on {len(crops)} crops.")
+
+    # Tutorial-exact ByteTrack
+    tracker = sv.ByteTrack(minimum_consecutive_frames=3)
+
+    # Ball detector (optional)
     ball_detector = None
     _candidate_ball = [ball_model_path] if ball_model_path else []
-    _candidate_ball += [
-        Path("artifacts/ball/football-ball-detection.pt"),
-    ]
-    for _bp in _candidate_ball:
-        if _bp is not None and Path(_bp).exists():
+    _candidate_ball += [Path("artifacts/ball/football-ball-detection.pt")]
+    for p in _candidate_ball:
+        if p is not None and Path(p).exists():
             try:
-                ball_detector = _BallDetector(Path(_bp))
-                print(f"  Ball detector enabled: {_bp}")
-                break
+                ball_detector = _BallDetector(Path(p))
+                print(f"  Ball detector: {p}")
             except Exception as e:
-                print(f"  Ball detector init failed ({_bp}): {e}")
+                print(f"  Ball detector init failed: {e}")
+            break
 
-    # Ball annotator using saved tracks (baseline until dedicated model ready)
     saved_ball_annotator = _SavedBallAnnotator(radius=6, buffer_size=10)
-
-    # Sports annotators — imported once
-    try:
-        from sports.annotators.soccer import draw_pitch as _draw_pitch, draw_points_on_pitch as _draw_pts
-        _sports_ok = True
-    except ImportError:
-        _sports_ok = False
 
     output_path = run_dir / "stats_video.mp4"
     cap = cv2.VideoCapture(str(video_path))
@@ -462,7 +342,9 @@ def render_stats_video(
         (video.width, video.height),
     )
 
-    transformer = static_transformer  # will be overwritten each frame by pitch_tracker
+    # Last successfully rendered radar — shown on frames where keypoints fail
+    last_radar: Optional[np.ndarray] = None
+
     frame_index = 0
     try:
         while True:
@@ -472,111 +354,113 @@ def render_stats_video(
 
             frame_tracks = tracks_by_frame.get(frame_index, [])
 
-            # 1. Pitch keypoint detection on CLEAN frame — must be before any drawing
-            #    (tutorial detects on raw frame first, then draws annotations)
-            if pitch_tracker is not None:
-                transformer = pitch_tracker.update(frame)
+            # --- Tutorial-exact: both models run on the same clean frame ---
 
-            # 2. Ball from saved tracks (baseline) OR dedicated detector if available
+            # 1. Pitch keypoints (clean frame, no imgsz override — tutorial-exact)
+            keypoints = None
+            if pitch_model is not None:
+                result = pitch_model(frame, verbose=False)[0]
+                keypoints = sv.KeyPoints.from_ultralytics(result)
+
+            # 2. Player/GK/referee detection (clean frame, imgsz=1280 — tutorial-exact)
+            result = player_model(frame, imgsz=1280, verbose=False)[0]
+            detections = sv.Detections.from_ultralytics(result)
+            detections = tracker.update_with_detections(detections)
+
+            # 3. Split by class (tutorial-exact)
+            players = detections[detections.class_id == PLAYER_CLASS_ID]
+            goalkeepers = detections[detections.class_id == GOALKEEPER_CLASS_ID]
+            referees = detections[detections.class_id == REFEREE_CLASS_ID]
+
+            # 4. Team classification via SigLIP (tutorial-exact, per-frame)
+            player_crops = get_crops(frame, players)
+            if len(player_crops) > 0:
+                players_team_id = team_classifier.predict(player_crops)
+            else:
+                players_team_id = np.array([], dtype=int)
+
+            # 5. GK team resolution (tutorial-exact)
+            try:
+                goalkeepers_team_id = resolve_goalkeepers_team_id(players, players_team_id, goalkeepers)
+            except Exception:
+                goalkeepers_team_id = np.zeros(len(goalkeepers), dtype=int)
+
+            # 6. Merge + color_lookup (tutorial-exact)
+            all_dets = sv.Detections.merge([players, goalkeepers, referees])
+            color_lookup = np.array(
+                players_team_id.tolist() +
+                goalkeepers_team_id.tolist() +
+                [REFEREE_CLASS_ID] * len(referees),
+                dtype=int,
+            )
+            labels = (
+                [str(tid) for tid in all_dets.tracker_id]
+                if all_dets.tracker_id is not None
+                else [""] * len(all_dets)
+            )
+
+            # 7. Annotate ellipses (tutorial-exact)
+            if len(all_dets) > 0:
+                frame = ELLIPSE_ANNOTATOR.annotate(frame, all_dets, custom_color_lookup=color_lookup)
+                frame = ELLIPSE_LABEL_ANNOTATOR.annotate(frame, all_dets, labels, custom_color_lookup=color_lookup)
+
+            # 7b. Pitch keypoint debug overlay (--show-keypoints)
+            if show_keypoints and keypoints is not None and kp_vertex_annotator is not None:
+                try:
+                    frame = kp_edge_annotator.annotate(frame, keypoints)
+                    frame = kp_vertex_annotator.annotate(frame, keypoints, radar_config.labels)
+                except Exception:
+                    pass
+
+            # 8. Ball: dedicated detector if available, else saved tracks fallback
             ball_xy_px = None
-            ball_detections = sv.Detections.empty()
-            # Saved ball track position
             for t in frame_tracks:
                 if t.label == "ball":
                     bx = (t.bbox.x1 + t.bbox.x2) / 2 * video.width
                     by = (t.bbox.y1 + t.bbox.y2) / 2 * video.height
                     ball_xy_px = np.array([bx, by])
                     break
-            # Dedicated ball model (when available — overrides saved position)
+            ball_detections = sv.Detections.empty()
             if ball_detector is not None:
                 try:
                     ball_detections = ball_detector.detect(frame)
                     if len(ball_detections) > 0:
-                        ball_xy_px = ball_detections.get_anchors_coordinates(
-                            sv.Position.BOTTOM_CENTER)[0]
+                        ball_xy_px = ball_detections.get_anchors_coordinates(sv.Position.BOTTOM_CENTER)[0]
                 except Exception:
                     ball_detections = sv.Detections.empty()
 
-            # 3. Per-frame team prediction
-            if clf and frame_tracks:
-                live_teams = _predict_frame_teams(clf, frame, frame_tracks, video)
-                frame_team_lookup = {**team_id_by_track, **live_teams}
-            else:
-                frame_team_lookup = team_id_by_track
-
-            # 4. Build supervision detections + tutorial color_lookup
-            all_dets, color_lookup, labels, player_entries, gk_entries, ref_entries = \
-                _build_frame_detections(frame_tracks, sticky_source, frame_team_lookup, video)
-
-            # 5. Annotate players/GKs/referees with supervision ellipses (tutorial style)
-            if len(all_dets) > 0:
-                frame = ELLIPSE_ANNOTATOR.annotate(frame, all_dets, custom_color_lookup=color_lookup)
-                frame = ELLIPSE_LABEL_ANNOTATOR.annotate(frame, all_dets, labels, custom_color_lookup=color_lookup)
-
-            # 6. Ball annotation with trail (saved tracks baseline)
             frame = saved_ball_annotator.update(frame, ball_xy_px)
-            # If dedicated detector is active, also draw its result
             if ball_detector is not None and len(ball_detections) > 0:
                 try:
                     frame = ball_detector.annotator.annotate(frame, ball_detections)
                 except Exception:
                     pass
 
-            # 7. Draw event labels
+            # 9. Event labels (from pre-computed JSON)
             for event in events_by_frame.get(frame_index, []):
                 _draw_event_label(frame, event)
 
-            # 8. Stats panel (our addition on top of tutorial)
+            # 10. Stats panel (from pre-computed JSON)
             poss = possession_by_frame.get(frame_index, {})
             _draw_stats_panel(frame, team_stats, poss, has_teams)
 
-            # 9. Radar (tutorial-exact: w//2 × h//2, bottom-center, 50% opacity)
-            if transformer is not None and radar_config is not None and _sports_ok:
+            # 11. Radar — tutorial-exact: live keypoints + live detections from same clean frame
+            # Falls back to last good radar when keypoints are insufficient this frame
+            if radar_config is not None:
                 try:
-                    fh, fw = frame.shape[:2]
-
-                    # Transform all person positions to pitch cm
-                    if len(all_dets) > 0:
-                        xy_px = all_dets.get_anchors_coordinates(sv.Position.BOTTOM_CENTER)
-                        xy_cm = transformer.transform_points(xy_px)
-                    else:
-                        xy_cm = np.zeros((0, 2))
-
-                    radar = _draw_pitch(config=radar_config)
-                    for cls_idx, color_hex in enumerate(TUTORIAL_COLORS):
-                        if len(xy_cm) > 0:
-                            mask = color_lookup == cls_idx
-                            if mask.any():
-                                radar = _draw_pts(
-                                    config=radar_config,
-                                    xy=xy_cm[mask],
-                                    face_color=sv.Color.from_hex(color_hex),
-                                    radius=20,
-                                    pitch=radar,
-                                )
-
-                    # Ball on radar (white dot)
-                    if ball_xy_px is not None:
-                        ball_cm = transformer.transform_points(
-                            ball_xy_px[np.newaxis].astype(np.float32))
-                        radar = _draw_pts(
-                            config=radar_config,
-                            xy=ball_cm,
-                            face_color=sv.Color.from_hex('#FFFFFF'),
-                            radius=15,
-                            pitch=radar,
-                        )
-
-                    # Tutorial-exact placement: w//2 × h//2, bottom center, 50% opacity
-                    radar_resized = sv.resize_image(radar, (fw // 2, fh // 2))
-                    rh, rw = radar_resized.shape[:2]
-                    rect = sv.Rect(
-                        x=fw // 2 - rw // 2,
-                        y=fh - rh,
-                        width=rw,
-                        height=rh,
-                    )
-                    frame = sv.draw_image(frame, radar_resized, opacity=0.5, rect=rect)
+                    radar = None
+                    if keypoints is not None:
+                        radar = render_radar(all_dets, keypoints, color_lookup, radar_config, ball_xy_px)
+                    if radar is not None:
+                        last_radar = radar
+                    elif last_radar is not None:
+                        radar = last_radar
+                    if radar is not None:
+                        fh, fw = frame.shape[:2]
+                        radar_resized = sv.resize_image(radar, (fw // 2, fh // 2))
+                        rh, rw = radar_resized.shape[:2]
+                        rect = sv.Rect(x=fw // 2 - rw // 2, y=fh - rh, width=rw, height=rh)
+                        frame = sv.draw_image(frame, radar_resized, opacity=0.5, rect=rect)
                 except Exception:
                     pass
 
@@ -622,9 +506,8 @@ def _draw_stats_panel(
     row_h = 26
     a = team_stats.get(0, {})
     b = team_stats.get(1, {})
-    # BGR versions of tutorial colours
-    color_a = (60, 20, 255)   # #FF1493 in BGR
-    color_b = (255, 191, 0)   # #00BFFF in BGR
+    color_a = (60, 20, 255)
+    color_b = (255, 191, 0)
 
     def text(x, row, s, color, scale=0.42):
         cv2.putText(frame, s, (x, y0 + row * row_h + 14),
