@@ -39,5 +39,9 @@ if (-not $?) { Write-Warning "detect-pitch-keypoints failed — minimap will be 
 ez-worker render-stats-video --run-dir $runDir --pitch-model-path artifacts/pitch/football-pitch-detectionV2.pt --player-model-path artifacts/training/roboflow_detector_v1_light/weights/best.pt
 if (-not $?) { Write-Error "render-stats-video failed"; exit 1 }
 
+ez-worker render-spatial-video --run-dir $runDir --pitch-model-path artifacts/pitch/football-pitch-detectionV2.pt
+if (-not $?) { Write-Error "render-spatial-video failed"; exit 1 }
+
 Write-Host ""
-Write-Host "Done. Stats video: $runDir\stats_video.mp4"
+Write-Host "Done. Stats video:   $runDir\stats_video.mp4"
+Write-Host "      Spatial video: $runDir\spatial_video.mp4"

@@ -28,7 +28,7 @@ from ez_worker.spatial.homography import apply_pitch_mapping
 from ez_worker.spatial.report import build_spatial_report
 from ez_worker.spatial.heatmap_export import build_heatmap_export
 from ez_worker.spatial.formation_export import build_formation_export
-from ez_worker.io.stats_video import render_stats_video
+from ez_worker.io.stats_video import render_stats_video, render_spatial_video
 from ez_worker.train import train_detector
 
 
@@ -286,6 +286,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Draw detected pitch keypoints (dots + edges) on the video for debugging.",
     )
 
+    spatial_video = subparsers.add_parser(
+        "render-spatial-video",
+        help="Render a separate top-down spatial analysis video (Voronoi + ball trail).",
+    )
+    spatial_video.add_argument("--run-dir", type=Path, required=True)
+    spatial_video.add_argument(
+        "--pitch-model-path",
+        type=Path,
+        default=None,
+        help="Path to pitch keypoint YOLO model (auto-discovered if not set).",
+    )
+    spatial_video.add_argument(
+        "--ball-model-path",
+        type=Path,
+        default=None,
+        help="Path to ball detection YOLO model (auto-discovered if not set).",
+    )
+
     train = subparsers.add_parser("train-detector", help="Train the football detector.")
     train.add_argument(
         "--dataset-dir",
@@ -479,6 +497,15 @@ def main() -> None:
             ball_model_path=getattr(args, "ball_model_path", None),
             player_model_path=getattr(args, "player_model_path", None),
             show_keypoints=getattr(args, "show_keypoints", False),
+        )
+        print(output_path)
+        return
+
+    if args.command == "render-spatial-video":
+        output_path = render_spatial_video(
+            args.run_dir,
+            pitch_model_path=getattr(args, "pitch_model_path", None),
+            ball_model_path=getattr(args, "ball_model_path", None),
         )
         print(output_path)
         return

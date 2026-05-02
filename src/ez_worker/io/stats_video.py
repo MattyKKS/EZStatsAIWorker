@@ -20,6 +20,7 @@ PLAYER_CLASS_ID = 2
 REFEREE_CLASS_ID = 3
 STRIDE = 60
 
+
 COLORS = ['#FF1493', '#00BFFF', '#FF6347', '#FFD700']
 REFEREE_COLOR_IDX = 3
 
@@ -344,6 +345,12 @@ def render_stats_video(
 
     # Last successfully rendered radar — shown on frames where keypoints fail
     last_radar: Optional[np.ndarray] = None
+    # Tracker IDs ever seen as referee — override their colour even on frames
+    # where the model misclassifies them as a player
+    known_referee_tids: set[int] = set()
+    # Per-GK team lock — goalkeepers never switch sides so first stable
+    # assignment is locked to prevent frame-to-frame flipping
+    gk_team_cache: dict[int, int] = {}
 
     frame_index = 0
     try:
@@ -372,6 +379,12 @@ def render_stats_video(
             goalkeepers = detections[detections.class_id == GOALKEEPER_CLASS_ID]
             referees = detections[detections.class_id == REFEREE_CLASS_ID]
 
+            # Record referee tracker IDs so frames where model misclassifies
+            # them as players can still receive the correct colour
+            if referees.tracker_id is not None:
+                for _tid in referees.tracker_id:
+                    known_referee_tids.add(int(_tid))
+
             # 4. Team classification via SigLIP (tutorial-exact, per-frame)
             player_crops = get_crops(frame, players)
             if len(player_crops) > 0:
@@ -385,6 +398,17 @@ def render_stats_video(
             except Exception:
                 goalkeepers_team_id = np.zeros(len(goalkeepers), dtype=int)
 
+            # Stabilise GK team — goalkeepers never switch sides
+            if goalkeepers.tracker_id is not None and len(goalkeepers_team_id) > 0:
+                stable_gk = goalkeepers_team_id.copy()
+                for i, _tid in enumerate(goalkeepers.tracker_id):
+                    _tid = int(_tid)
+                    if _tid in gk_team_cache:
+                        stable_gk[i] = gk_team_cache[_tid]
+                    else:
+                        gk_team_cache[_tid] = int(stable_gk[i])
+                goalkeepers_team_id = stable_gk
+
             # 6. Merge + color_lookup (tutorial-exact)
             all_dets = sv.Detections.merge([players, goalkeepers, referees])
             color_lookup = np.array(
@@ -393,6 +417,13 @@ def render_stats_video(
                 [REFEREE_CLASS_ID] * len(referees),
                 dtype=int,
             )
+
+            # Override: any tracker_id previously seen as referee → force yellow
+            # (fixes frames where model misclassifies the referee as a player)
+            if all_dets.tracker_id is not None:
+                for _i, _tid in enumerate(all_dets.tracker_id):
+                    if int(_tid) in known_referee_tids:
+                        color_lookup[_i] = REFEREE_CLASS_ID
             labels = (
                 [str(tid) for tid in all_dets.tracker_id]
                 if all_dets.tracker_id is not None
@@ -591,6 +622,252 @@ def _compute_possession_by_frame(
         total = sum(counts.values())
         result[frame_idx] = {0: 0.5, 1: 0.5} if total == 0 else {k: counts[k] / total for k in (0, 1)}
     return result
+
+
+# ---------------------------------------------------------------------------
+# Spatial analysis helpers (tutorial 1:20–1:26)
+# ---------------------------------------------------------------------------
+
+def replace_outlier_based_on_distance(
+    positions: list,
+    max_distance: float = 500.0,
+) -> list:
+    """Return positions with jumps > max_distance cm removed (non-destructive)."""
+    result = []
+    for pos in positions:
+        if len(result) == 0 or np.linalg.norm(np.array(pos) - np.array(result[-1])) <= max_distance:
+            result.append(pos)
+    return result
+
+
+def render_spatial_video(
+    run_dir: Path,
+    pitch_model_path: Optional[Path] = None,
+    ball_model_path: Optional[Path] = None,
+) -> Path:
+    """Top-down spatial analysis video: Voronoi + player dots + ball trajectory.
+
+    Completely separate from stats_video.mp4 — does not touch it.
+    Uses pre-computed tracks_with_teams.json for team assignments so no
+    player model re-inference is needed.  Output: <run_dir>/spatial_video.mp4.
+    """
+    import torch
+    from collections import deque
+    from ultralytics import YOLO
+    from sports.configs.soccer import SoccerPitchConfiguration
+    from sports.annotators.soccer import (
+        draw_pitch,
+        draw_points_on_pitch,
+        draw_pitch_voronoi_diagram,
+        draw_paths_on_pitch,
+    )
+    from sports.common.view import ViewTransformer
+
+    run_dir = run_dir.resolve()
+    summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
+    video_path = Path(summary["video_path"])
+
+    tracks_with_teams_path = run_dir / "tracks_with_teams.json"
+    tracks_path = run_dir / "tracks.json"
+    raw_tracks = json.loads(
+        (tracks_with_teams_path if tracks_with_teams_path.exists() else tracks_path)
+        .read_text(encoding="utf-8")
+    )
+    tracks = [_parse_track(t) for t in raw_tracks]
+    tracks_by_frame: dict[int, list[TrackObservation]] = defaultdict(list)
+    for t in tracks:
+        tracks_by_frame[t.frame_index].append(t)
+
+    video_meta_raw = json.loads((run_dir / "video_meta.json").read_text(encoding="utf-8"))
+    video = VideoMeta(
+        path=video_path,
+        fps=video_meta_raw["fps"],
+        frame_count=video_meta_raw["frame_count"],
+        width=video_meta_raw["width"],
+        height=video_meta_raw["height"],
+    )
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    config = SoccerPitchConfiguration()
+
+    # Pitch model (required for homography)
+    pitch_model = None
+    for p in ([pitch_model_path] if pitch_model_path else []) + [
+        Path("artifacts/pitch/football-pitch-detectionV2.pt"),
+        Path("artifacts/pitch/football-pitch-detection.pt"),
+    ]:
+        if p is not None and Path(p).exists():
+            pitch_model = YOLO(str(p)).to(device)
+            print(f"  Spatial pitch model: {p}")
+            break
+    if pitch_model is None:
+        raise RuntimeError("Pitch model not found — pass --pitch-model-path or place in artifacts/pitch/")
+
+    # Ball model (optional — falls back to saved tracks.json positions)
+    ball_detector = None
+    for p in ([ball_model_path] if ball_model_path else []) + [
+        Path("artifacts/ball/football-ball-detection.pt"),
+    ]:
+        if p is not None and Path(p).exists():
+            try:
+                ball_detector = _BallDetector(Path(p))
+                print(f"  Spatial ball detector: {p}")
+            except Exception as exc:
+                print(f"  Ball detector init failed: {exc}")
+            break
+
+    # Output dimensions = pitch diagram size (fixed by draw_pitch defaults)
+    sample_pitch = draw_pitch(config=config)
+    spatial_h, spatial_w = sample_pitch.shape[:2]
+
+    output_path = run_dir / "spatial_video.mp4"
+    writer = cv2.VideoWriter(
+        str(output_path),
+        cv2.VideoWriter_fourcc(*"mp4v"),
+        video.fps,
+        (spatial_w, spatial_h),
+    )
+
+    # Averaged homography: keep last 5 valid H matrices (tutorial window=5)
+    H_deque: deque = deque(maxlen=5)
+    # Accumulated ball positions in pitch cm, capped to last ~5 s
+    ball_path_cm: list = []
+    BALL_TRAIL_MAX = 150
+
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        raise RuntimeError(f"Cannot open video: {video_path}")
+
+    frame_index = 0
+    try:
+        with tqdm(total=video.frame_count, desc="spatial") as pbar:
+            while True:
+                ok, frame = cap.read()
+                if not ok:
+                    break
+
+                frame_tracks = tracks_by_frame.get(frame_index, [])
+
+                # 1. Pitch keypoints → ViewTransformer → collect H matrix
+                result = pitch_model(frame, verbose=False)[0]
+                keypoints = sv.KeyPoints.from_ultralytics(result)
+
+                if keypoints.xy is not None and len(keypoints.xy) > 0:
+                    pos_mask = (keypoints.xy[0][:, 0] > 1) & (keypoints.xy[0][:, 1] > 1)
+                    if keypoints.confidence is not None and len(keypoints.confidence) > 0:
+                        conf_mask = keypoints.confidence[0] > 0.5
+                        mask = pos_mask & conf_mask
+                    else:
+                        mask = pos_mask
+                    if mask.sum() >= 6:
+                        try:
+                            transformer = ViewTransformer(
+                                source=keypoints.xy[0][mask].astype(np.float32),
+                                target=np.array(config.vertices)[mask].astype(np.float32),
+                            )
+                            if transformer.m is not None:
+                                H_deque.append(transformer.m.copy())
+                        except Exception:
+                            pass
+
+                avg_H = np.mean(np.stack(list(H_deque)), axis=0) if len(H_deque) > 0 else None
+
+                # 2. Player positions from pre-computed tracks (team_id already assigned)
+                all_px, all_team = [], []
+                for t in frame_tracks:
+                    if t.label not in ("player", "goalkeeper"):
+                        continue
+                    bx = (t.bbox.x1 + t.bbox.x2) / 2 * video.width
+                    by = t.bbox.y2 * video.height
+                    all_px.append([bx, by])
+                    all_team.append(t.team_id if t.team_id is not None else -1)
+
+                team_0_cm = np.empty((0, 2), dtype=np.float32)
+                team_1_cm = np.empty((0, 2), dtype=np.float32)
+                if avg_H is not None and len(all_px) > 0:
+                    pts = np.array(all_px, dtype=np.float32)
+                    transformed = cv2.perspectiveTransform(pts.reshape(-1, 1, 2), avg_H).reshape(-1, 2)
+                    teams = np.array(all_team)
+                    team_0_cm = transformed[teams == 0]
+                    team_1_cm = transformed[teams == 1]
+
+                # 3. Ball position (live detector preferred, tracks.json fallback)
+                ball_xy_px = None
+                for t in frame_tracks:
+                    if t.label == "ball":
+                        bx = (t.bbox.x1 + t.bbox.x2) / 2 * video.width
+                        by = (t.bbox.y1 + t.bbox.y2) / 2 * video.height
+                        ball_xy_px = np.array([bx, by])
+                        break
+                if ball_detector is not None:
+                    try:
+                        ball_dets = ball_detector.detect(frame)
+                        if len(ball_dets) > 0:
+                            ball_xy_px = ball_dets.get_anchors_coordinates(sv.Position.BOTTOM_CENTER)[0]
+                    except Exception:
+                        pass
+
+                ball_cm_pos = None
+                if avg_H is not None and ball_xy_px is not None:
+                    ball_cm_pos = cv2.perspectiveTransform(
+                        np.array([[ball_xy_px]], dtype=np.float32), avg_H
+                    ).reshape(2)
+
+                # Accumulate ball trail (capped)
+                ball_path_cm.append(ball_cm_pos)
+                if len(ball_path_cm) > BALL_TRAIL_MAX:
+                    ball_path_cm = ball_path_cm[-BALL_TRAIL_MAX:]
+
+                # 4. Build spatial frame: Voronoi background
+                if len(team_0_cm) > 0 and len(team_1_cm) > 0:
+                    spatial_frame = draw_pitch_voronoi_diagram(
+                        config=config,
+                        team_1_xy=team_0_cm,
+                        team_2_xy=team_1_cm,
+                        team_1_color=sv.Color.from_hex(COLORS[0]),
+                        team_2_color=sv.Color.from_hex(COLORS[1]),
+                        opacity=0.35,
+                    )
+                else:
+                    spatial_frame = draw_pitch(config=config)
+
+                # Player dots on top of Voronoi
+                if len(team_0_cm) > 0:
+                    spatial_frame = draw_points_on_pitch(
+                        config=config, xy=team_0_cm,
+                        face_color=sv.Color.from_hex(COLORS[0]), radius=16, pitch=spatial_frame)
+                if len(team_1_cm) > 0:
+                    spatial_frame = draw_points_on_pitch(
+                        config=config, xy=team_1_cm,
+                        face_color=sv.Color.from_hex(COLORS[1]), radius=16, pitch=spatial_frame)
+
+                # Ball trail: filter outliers then draw path
+                trail_pts = [p for p in ball_path_cm if p is not None]
+                if len(trail_pts) >= 2:
+                    clean_trail = replace_outlier_based_on_distance(trail_pts, max_distance=500.0)
+                    if len(clean_trail) >= 2:
+                        spatial_frame = draw_paths_on_pitch(
+                            config=config,
+                            paths=[np.array(clean_trail)],
+                            color=sv.Color.from_hex('#FFFFFF'),
+                            thickness=2,
+                            pitch=spatial_frame,
+                        )
+
+                # Ball current position dot
+                if ball_cm_pos is not None:
+                    spatial_frame = draw_points_on_pitch(
+                        config=config, xy=ball_cm_pos[np.newaxis],
+                        face_color=sv.Color.from_hex('#FFFFFF'), radius=12, pitch=spatial_frame)
+
+                writer.write(spatial_frame)
+                frame_index += 1
+                pbar.update(1)
+    finally:
+        cap.release()
+        writer.release()
+
+    return output_path
 
 
 # ---------------------------------------------------------------------------
