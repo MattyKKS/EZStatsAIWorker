@@ -59,10 +59,11 @@ def run_analysis(video_path: Path, config: PipelineConfig) -> Path:
         tracks=tracks,
         video=video,
         ball_track_id=config.ball_track_id,
-        pass_distance_threshold=config.pass_distance_threshold,
-        shot_zone_x_threshold=config.shot_zone_x_threshold,
         possession_distance_threshold_px=config.possession_distance_threshold_px,
         possession_min_consecutive_frames=config.possession_min_consecutive_frames,
+        ball_direction_change_min_deg=config.ball_direction_change_min_deg,
+        shot_min_speed_px_per_frame=config.shot_min_speed_px_per_frame,
+        shot_no_catch_frames=config.shot_no_catch_frames,
     )
     if config.event_model_name:
         print(f"Running event spotter: {config.event_model_name}")

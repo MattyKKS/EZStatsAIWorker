@@ -86,13 +86,20 @@ class _BallDetector:
             result = self._model(image_slice, imgsz=640, verbose=False)[0]
             return sv.Detections.from_ultralytics(result)
 
-        self._slicer = sv.InferenceSlicer(
+        import inspect as _inspect
+        _slicer_params = _inspect.signature(sv.InferenceSlicer.__init__).parameters
+        _slicer_kwargs: dict = dict(
             callback=_callback,
-            overlap_filter=sv.OverlapFilter.NONE,
             slice_wh=(640, 640),
-            overlap_ratio_wh=None,
             overlap_wh=(0, 0),
         )
+        # supervision ≥0.25 renamed overlap_filter → overlap_filter_strategy and removed overlap_ratio_wh
+        if "overlap_filter_strategy" in _slicer_params:
+            _slicer_kwargs["overlap_filter_strategy"] = sv.OverlapFilter.NONE
+        else:
+            _slicer_kwargs["overlap_filter"] = sv.OverlapFilter.NONE
+            _slicer_kwargs["overlap_ratio_wh"] = None
+        self._slicer = sv.InferenceSlicer(**_slicer_kwargs)
 
     def detect(self, frame: np.ndarray) -> sv.Detections:
         detections = self._slicer(frame).with_nms(threshold=0.1)
@@ -640,6 +647,36 @@ def replace_outlier_based_on_distance(
     return result
 
 
+def interpolate_ball_path(positions: list, max_gap: int = 30) -> list:
+    """Fill short None gaps with linear interpolation.
+
+    When the ball is airborne it is often not detected (None). Interpolating
+    between the last ground contact and next ground contact gives the correct
+    straight-line ground-plane path without needing 3D tracking.
+    Gaps longer than max_gap frames are left as None (ball truly lost).
+    """
+    result = list(positions)
+    n = len(result)
+    i = 0
+    while i < n:
+        if result[i] is None:
+            gap_start = i
+            while i < n and result[i] is None:
+                i += 1
+            gap_end = i
+            gap_len = gap_end - gap_start
+            if gap_len <= max_gap and gap_start > 0 and gap_end < n:
+                p0 = result[gap_start - 1]
+                p1 = result[gap_end]
+                if p0 is not None and p1 is not None:
+                    for k in range(gap_len):
+                        t = (k + 1) / (gap_len + 1)
+                        result[gap_start + k] = p0 + t * (np.asarray(p1) - np.asarray(p0))
+        else:
+            i += 1
+    return result
+
+
 def render_spatial_video(
     run_dir: Path,
     pitch_model_path: Optional[Path] = None,
@@ -841,8 +878,16 @@ def render_spatial_video(
                         config=config, xy=team_1_cm,
                         face_color=sv.Color.from_hex(COLORS[1]), radius=16, pitch=spatial_frame)
 
-                # Ball trail: filter outliers then draw path
-                trail_pts = [p for p in ball_path_cm if p is not None]
+                # Interpolate across short None gaps (ball airborne → not detected)
+                interp_path = interpolate_ball_path(ball_path_cm, max_gap=30)
+
+                # Current position dot: prefer live detection, fallback to interpolated
+                display_ball_cm = ball_cm_pos
+                if display_ball_cm is None and interp_path and interp_path[-1] is not None:
+                    display_ball_cm = interp_path[-1]
+
+                # Ball trail: use interpolated path, strip remaining Nones, filter outliers
+                trail_pts = [p for p in interp_path if p is not None]
                 if len(trail_pts) >= 2:
                     clean_trail = replace_outlier_based_on_distance(trail_pts, max_distance=500.0)
                     if len(clean_trail) >= 2:
@@ -855,9 +900,9 @@ def render_spatial_video(
                         )
 
                 # Ball current position dot
-                if ball_cm_pos is not None:
+                if display_ball_cm is not None:
                     spatial_frame = draw_points_on_pitch(
-                        config=config, xy=ball_cm_pos[np.newaxis],
+                        config=config, xy=display_ball_cm[np.newaxis],
                         face_color=sv.Color.from_hex('#FFFFFF'), radius=12, pitch=spatial_frame)
 
                 writer.write(spatial_frame)

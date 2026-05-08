@@ -47,10 +47,11 @@ class PipelineConfig(BaseModel):
     export_player_crops: bool = Field(default=False)
     max_crops_per_track: int = Field(default=20, ge=1)
     ball_track_id: int = Field(default=0)
-    pass_distance_threshold: float = Field(default=140.0, gt=0)
-    shot_zone_x_threshold: float = Field(default=0.82, gt=0, lt=1.0)
     possession_distance_threshold_px: float = Field(default=65.0, gt=0)
     possession_min_consecutive_frames: int = Field(default=2, ge=1)
+    ball_direction_change_min_deg: float = Field(default=25.0, gt=0, lt=180.0)
+    shot_min_speed_px_per_frame: float = Field(default=25.0, gt=0)
+    shot_no_catch_frames: int = Field(default=20, ge=1)
     auto_calibrate: bool = Field(default=False)
     event_model_name: Optional[str] = Field(default=None)
 
