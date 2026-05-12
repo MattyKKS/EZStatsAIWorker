@@ -144,6 +144,50 @@ def apply_team_clusters(run_dir: Path) -> Path:
         enriched["team_id"] = track_to_team.get(int(stat["track_id"]))
         enriched_stats.append(enriched)
 
+    # ── Manual track ID merges ──────────────────────────────────────────────
+    # Create manual_track_merges.json in the run dir to combine stats from a
+    # re-spawned track into the canonical track: [[old_id, canonical_id], ...]
+    merge_file = run_dir / "manual_track_merges.json"
+    if merge_file.exists():
+        merge_list = json.loads(merge_file.read_text(encoding="utf-8"))
+        manual_merges: dict[int, int] = {int(old): int(new) for old, new in merge_list}
+
+        # Remap track observations
+        for t in enriched_tracks:
+            old = int(t.get("track_id", -1))
+            if old in manual_merges:
+                t["track_id"] = manual_merges[old]
+                if t.get("team_id") is None:
+                    t["team_id"] = track_to_team.get(manual_merges[old])
+
+        # Merge stats — add numeric fields, keep canonical track's team
+        stat_map: dict[int, dict] = {}
+        for s in enriched_stats:
+            tid = int(s["track_id"])
+            canonical = manual_merges.get(tid, tid)
+            if canonical not in stat_map:
+                stat_map[canonical] = {**s, "track_id": canonical}
+            else:
+                for field in ("touch_count", "pass_count", "shot_count"):
+                    stat_map[canonical][field] = stat_map[canonical].get(field, 0) + s.get(field, 0)
+                stat_map[canonical]["approx_distance_px"] = (
+                    stat_map[canonical].get("approx_distance_px", 0.0) + s.get("approx_distance_px", 0.0)
+                )
+                if stat_map[canonical].get("team_id") is None:
+                    stat_map[canonical]["team_id"] = s.get("team_id")
+        enriched_stats = list(stat_map.values())
+
+        # Remap events actor/target IDs
+        events_path = run_dir / "events.json"
+        if events_path.exists():
+            raw_events = json.loads(events_path.read_text(encoding="utf-8"))
+            for evt in raw_events:
+                if evt.get("actor_track_id") in manual_merges:
+                    evt["actor_track_id"] = manual_merges[evt["actor_track_id"]]
+                if evt.get("target_track_id") in manual_merges:
+                    evt["target_track_id"] = manual_merges[evt["target_track_id"]]
+            events_path.write_text(json.dumps(raw_events, indent=2), encoding="utf-8")
+
     team_summary = _build_team_summary(enriched_stats)
     payload = {
         "run_dir": str(run_dir),
@@ -167,7 +211,99 @@ def apply_team_clusters(run_dir: Path) -> Path:
     )
     output_path = run_dir / "team_assignments.json"
     output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    _rebuild_match_report(run_dir, enriched_tracks, enriched_stats)
     return output_path
+
+
+def _rebuild_match_report(
+    run_dir: Path,
+    enriched_tracks: list[dict],
+    enriched_stats: list[dict],
+) -> None:
+    events_path = run_dir / "events.json"
+    events = json.loads(events_path.read_text(encoding="utf-8")) if events_path.exists() else []
+    video_meta = json.loads((run_dir / "video_meta.json").read_text(encoding="utf-8"))
+
+    team_votes: dict[int, Counter] = defaultdict(Counter)
+    for obs in enriched_tracks:
+        if obs.get("label") == "player" and obs.get("team_id") is not None:
+            team_votes[int(obs["track_id"])][int(obs["team_id"])] += 1
+    track_team = {tid: votes.most_common(1)[0][0] for tid, votes in team_votes.items()}
+
+    team_touches: Counter = Counter()
+    for evt in events:
+        if evt.get("event_type") == "touch" and evt.get("actor_track_id") is not None:
+            t = track_team.get(int(evt["actor_track_id"]))
+            if t is not None:
+                team_touches[t] += 1
+    total = sum(team_touches.values()) or 1
+    possession = {str(tid): round(cnt / total * 100, 1) for tid, cnt in sorted(team_touches.items())}
+
+    players = []
+    for s in enriched_stats:
+        tid = int(s["track_id"])
+        crop_dir = run_dir / "player_crops" / f"track_{tid:04d}"
+        crop_path = None
+        if crop_dir.exists():
+            crops = sorted(crop_dir.glob("frame_*.jpg"))
+            if crops:
+                crop_path = f"player_crops/track_{tid:04d}/{crops[0].name}"
+        players.append({
+            "track_id": tid,
+            "team_id": s.get("team_id") if s.get("team_id") is not None else track_team.get(tid),
+            "touches": s.get("touch_count", 0),
+            "passes": s.get("pass_count", 0),
+            "shots": s.get("shot_count", 0),
+            "distance_px": round(float(s.get("approx_distance_px", 0)), 1),
+            "crop_path": crop_path,
+        })
+
+    edge_counts: Counter = Counter()
+    for e in events:
+        if e.get("event_type") == "pass" and e.get("actor_track_id") is not None and e.get("target_track_id") is not None:
+            edge_counts[(e["actor_track_id"], e["target_track_id"])] += 1
+
+    fps = video_meta.get("fps", 25.0)
+    frame_count = video_meta.get("frame_count", 0)
+    type_counts: Counter = Counter(e.get("event_type") for e in events)
+
+    report = {
+        "match_id": run_dir.name,
+        "video": video_meta.get("path", ""),
+        "duration_s": round(frame_count / fps, 1),
+        "fps": fps,
+        "possession": possession,
+        "players": players,
+        "events": [
+            {
+                "type": e.get("event_type"),
+                "frame": e.get("frame_index"),
+                "time_s": e.get("time_seconds"),
+                "actor": e.get("actor_track_id"),
+                "target": e.get("target_track_id"),
+                "details": e.get("details"),
+            }
+            for e in events
+        ],
+        "pass_network": {
+            "nodes": [{"id": p["track_id"], "team_id": p["team_id"]} for p in players],
+            "edges": [
+                {"from": src, "to": dst, "count": cnt}
+                for (src, dst), cnt in sorted(edge_counts.items(), key=lambda x: -x[1])
+            ],
+        },
+        "summary": {
+            "total_touches":       type_counts.get("touch", 0),
+            "total_passes":        type_counts.get("pass", 0),
+            "total_long_balls":    type_counts.get("long_ball", 0),
+            "total_clearances":    type_counts.get("clearance", 0),
+            "total_interceptions": type_counts.get("interception", 0),
+            "total_shots":         type_counts.get("shot_attempt", 0),
+            "total_goals":         type_counts.get("goal", 0),
+        },
+    }
+    (run_dir / "match_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
 
 
 def _build_team_summary(stats: list[dict]) -> list[dict]:

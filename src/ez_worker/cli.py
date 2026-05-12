@@ -84,9 +84,9 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_CONFIG.possession_distance_threshold_px,
     )
     analyze.add_argument(
-        "--possession-min-consecutive-frames",
-        type=int,
-        default=DEFAULT_CONFIG.possession_min_consecutive_frames,
+        "--possession-min-seconds",
+        type=float,
+        default=DEFAULT_CONFIG.possession_min_seconds,
     )
     analyze.add_argument(
         "--auto-calibrate",
@@ -355,7 +355,7 @@ def main() -> None:
             ball_smoothing_alpha=args.ball_smoothing_alpha,
             max_crops_per_track=args.max_crops_per_track,
             possession_distance_threshold_px=args.possession_distance_threshold_px,
-            possession_min_consecutive_frames=args.possession_min_consecutive_frames,
+            possession_min_seconds=args.possession_min_seconds,
             auto_calibrate=args.auto_calibrate,
             event_model_name=args.event_model_name,
         )

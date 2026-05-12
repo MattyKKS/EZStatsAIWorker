@@ -1,6 +1,14 @@
 # Full pipeline: analyze -> team clustering -> stats video
 # Output folder is auto-detected from the analyze step
 
+# ── Tracker selection ──────────────────────────────────────────────────────
+# Step 1: try bytetrack_v2 (lower match_thresh, no ReID — fast)
+# Step 2: if IDs still swap in viewer, switch to botsort (has ReID, ~20% slower)
+# $trackerConfig = "configs/bytetrack_football_v2.yaml"
+$trackerConfig = "configs/bytetrack_football.yaml"
+# ──────────────────────────────────────────────────────────────────────────
+
+
 function Invoke-Step {
     param([string]$Name, [scriptblock]$Block, [switch]$AllowFailure)
     Write-Host ""
@@ -24,7 +32,7 @@ $output = Invoke-Step "analyze" {
       --video data/raw/08fd33_4.mp4 `
       --provider ultralytics `
       --model-name artifacts/training/roboflow_detector_v1_light/weights/best.pt `
-      --tracker-config configs/bytetrack_football.yaml `
+      --tracker-config $trackerConfig `
       --render-video --frame-step 1 `
       --ball-detection-imgsz 1280 --detection-confidence 0.20 --detection-iou 0.45 `
       --min-player-confidence 0.18 --min-ball-confidence 0.10 `
@@ -34,9 +42,9 @@ $output = Invoke-Step "analyze" {
       --max-interpolation-gap-frames 10 --max-ball-jump-px 90 `
       --ball-reset-gap-frames 20 --ball-reset-confidence 0.55 `
       --ball-hold-max-gap-frames 8 --ball-smoothing-alpha 0.35 `
-      --possession-distance-threshold-px 65 --possession-min-consecutive-frames 2 `
-      --auto-calibrate --export-player-crops `
-      --event-model-name artifacts/training/event_spotter_v1/model.pt
+      --possession-distance-threshold-px 120 --possession-min-seconds 0.15 `
+      --auto-calibrate --export-player-crops
+      # --event-model-name artifacts/training/event_spotter_pcbas2026/model.pt  ← uncomment after training finishes
 }
 
 # Extract run dir from the last line of output
@@ -53,7 +61,7 @@ Invoke-Step "detect-pitch-keypoints" -AllowFailure { ez-worker detect-pitch-keyp
 
 Invoke-Step "render-stats-video" { ez-worker render-stats-video --run-dir $runDir --pitch-model-path artifacts/pitch/football-pitch-detectionV2.pt --player-model-path artifacts/training/roboflow_detector_v1_light/weights/best.pt }
 
-Invoke-Step "render-spatial-video" { ez-worker render-spatial-video --run-dir $runDir --pitch-model-path artifacts/pitch/football-pitch-detectionV2.pt }
+# Invoke-Step "render-spatial-video" { ez-worker render-spatial-video --run-dir $runDir --pitch-model-path artifacts/pitch/football-pitch-detectionV2.pt }
 
 $pipelineStart.Stop()
 $totalElapsed = "{0:mm\:ss\.ff}" -f $pipelineStart.Elapsed

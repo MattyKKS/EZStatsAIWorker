@@ -1,5 +1,13 @@
 # Full pipeline for 19PassesAndMasonGoal.mp4
 
+# ── Tracker selection ──────────────────────────────────────────────────────
+# Step 1: try bytetrack_v2 (lower match_thresh, no ReID — fast)
+# Step 2: if IDs still swap in viewer, switch to botsort (has ReID, ~20% slower)
+# $trackerConfig = "configs/bytetrack_football_v2.yaml"
+$trackerConfig = "configs/bytetrack_football.yaml"
+# ──────────────────────────────────────────────────────────────────────────
+
+
 function Invoke-Step {
     param([string]$Name, [scriptblock]$Block, [switch]$AllowFailure)
     Write-Host ""
@@ -23,7 +31,7 @@ $output = Invoke-Step "analyze" {
       --video data/raw/19PassesAndMasonGoal.mp4 `
       --provider ultralytics `
       --model-name artifacts/training/roboflow_detector_v1_light/weights/best.pt `
-      --tracker-config configs/bytetrack_football.yaml `
+      --tracker-config $trackerConfig `
       --render-video --frame-step 1 `
       --ball-detection-imgsz 1280 --detection-confidence 0.20 --detection-iou 0.45 `
       --min-player-confidence 0.18 --min-ball-confidence 0.10 `
@@ -33,9 +41,9 @@ $output = Invoke-Step "analyze" {
       --max-interpolation-gap-frames 10 --max-ball-jump-px 90 `
       --ball-reset-gap-frames 20 --ball-reset-confidence 0.55 `
       --ball-hold-max-gap-frames 8 --ball-smoothing-alpha 0.35 `
-      --possession-distance-threshold-px 65 --possession-min-consecutive-frames 2 `
-      --auto-calibrate --export-player-crops `
-      --event-model-name artifacts/training/event_spotter_v1/model.pt
+      --possession-distance-threshold-px 120 --possession-min-seconds 0.15 `
+      --auto-calibrate --export-player-crops
+      # --event-model-name artifacts/training/event_spotter_pcbas2026/model.pt  ← uncomment after training finishes
 }
 
 $runDir = ($output | Select-Object -Last 1).Trim() -replace "Analysis complete\. Outputs written to: ", ""

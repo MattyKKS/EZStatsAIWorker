@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ez_worker.analytics.events import detect_events
-from ez_worker.analytics.event_spotter import run_event_spotter
+from ez_worker.analytics.event_spotter import fuse_events, run_event_spotter
 from ez_worker.analytics.stats import build_track_stats
 from ez_worker.config import PipelineConfig
 from ez_worker.io.crops import export_player_crops
@@ -59,11 +59,17 @@ def run_analysis(video_path: Path, config: PipelineConfig) -> Path:
         tracks=tracks,
         video=video,
         ball_track_id=config.ball_track_id,
+        possession_distance_threshold_cm=config.possession_distance_threshold_cm,
         possession_distance_threshold_px=config.possession_distance_threshold_px,
-        possession_min_consecutive_frames=config.possession_min_consecutive_frames,
+        possession_min_seconds=config.possession_min_seconds,
+        pass_min_speed_cms=config.pass_min_speed_cms,
+        pass_min_speed_px_per_s=config.pass_min_speed_px_per_s,
+        shot_min_speed_cms=config.shot_min_speed_cms,
+        shot_min_speed_px_per_s=config.shot_min_speed_px_per_s,
+        shot_no_catch_seconds=config.shot_no_catch_seconds,
         ball_direction_change_min_deg=config.ball_direction_change_min_deg,
-        shot_min_speed_px_per_frame=config.shot_min_speed_px_per_frame,
-        shot_no_catch_frames=config.shot_no_catch_frames,
+        clearance_min_flight_seconds=config.clearance_min_flight_seconds,
+        clearance_min_arc_frac=config.clearance_min_arc_frac,
     )
     if config.event_model_name:
         print(f"Running event spotter: {config.event_model_name}")
@@ -73,7 +79,7 @@ def run_analysis(video_path: Path, config: PipelineConfig) -> Path:
             model_name=config.event_model_name,
         )
         print(f"Event spotter found {len(spotter_events)} events.")
-        events = sorted(events + spotter_events, key=lambda e: e.frame_index)
+        events = fuse_events(events, spotter_events, video_fps=video.fps)
     stats = build_track_stats(tracks=tracks, events=events, video=video)
 
     processed_video_path = provider_artifacts.processed_video_path

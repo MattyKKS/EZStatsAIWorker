@@ -1,0 +1,16 @@
+tracker_type: botsort
+track_high_thresh: 0.20
+track_low_thresh: 0.05
+new_track_thresh: 0.20
+track_buffer: 90
+match_thresh: 0.75
+fuse_score: True
+
+# BoT-SORT specifics
+gmc_method: sparseOptFlow
+
+# ReID
+proximity_thresh: 0.5
+appearance_thresh: 0.60  # default 0.8 — lowered so ReID kicks in more during football occlusions
+with_reid: False  # OSNet can't distinguish football players — SigLIP merger handles ID fixing instead
+model: auto

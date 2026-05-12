@@ -47,11 +47,32 @@ class PipelineConfig(BaseModel):
     export_player_crops: bool = Field(default=False)
     max_crops_per_track: int = Field(default=20, ge=1)
     ball_track_id: int = Field(default=0)
-    possession_distance_threshold_px: float = Field(default=65.0, gt=0)
-    possession_min_consecutive_frames: int = Field(default=2, ge=1)
-    ball_direction_change_min_deg: float = Field(default=25.0, gt=0, lt=180.0)
-    shot_min_speed_px_per_frame: float = Field(default=25.0, gt=0)
-    shot_no_catch_frames: int = Field(default=20, ge=1)
+    # ── Possession ──────────────────────────────────────────────────────────
+    possession_distance_threshold_cm: float = Field(default=200.0, gt=0,
+        description="Ball ownership radius in cm (used when pitch coords available)")
+    possession_distance_threshold_px: float = Field(default=50.0, gt=0,
+        description="Pixel-space fallback when homography is unavailable")
+    possession_min_seconds: float = Field(default=0.15, gt=0,
+        description="Seconds ball must stay near a player to confirm ownership")
+    # ── Pass ────────────────────────────────────────────────────────────────
+    pass_min_speed_cms: float = Field(default=250.0, gt=0,
+        description="Minimum ball speed in cm/s to enter IN_FLIGHT (real pass vs slow drift)")
+    pass_min_speed_px_per_s: float = Field(default=200.0, gt=0,
+        description="Pixel fallback for pass_min_speed_cms")
+    ball_direction_change_min_deg: float = Field(default=35.0, gt=0, lt=180.0,
+        description="Direction change required for slow direct-possession pass detection")
+    # ── Shot ────────────────────────────────────────────────────────────────
+    shot_min_speed_cms: float = Field(default=1200.0, gt=0,
+        description="Minimum ball launch speed in cm/s to classify as shot (12 m/s)")
+    shot_min_speed_px_per_s: float = Field(default=600.0, gt=0,
+        description="Pixel fallback for shot_min_speed_cms")
+    shot_no_catch_seconds: float = Field(default=1.0, gt=0,
+        description="Seconds with no reception after launch to confirm shot")
+    # ── Clearance / high ball ────────────────────────────────────────────────
+    clearance_min_flight_seconds: float = Field(default=1.2, gt=0,
+        description="Flight longer than this with arc = clearance/long_ball, not shot")
+    clearance_min_arc_frac: float = Field(default=0.04, gt=0,
+        description="Ball y-range > this fraction of frame height to count as high arc")
     auto_calibrate: bool = Field(default=False)
     event_model_name: Optional[str] = Field(default=None)
 
