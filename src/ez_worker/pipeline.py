@@ -70,6 +70,11 @@ def run_analysis(video_path: Path, config: PipelineConfig) -> Path:
         ball_direction_change_min_deg=config.ball_direction_change_min_deg,
         clearance_min_flight_seconds=config.clearance_min_flight_seconds,
         clearance_min_arc_frac=config.clearance_min_arc_frac,
+        pass_min_flight_frames=config.pass_min_flight_frames,
+        owner_min_possession_frames=config.owner_min_possession_frames,
+        pass_min_ball_travel_px=config.pass_min_ball_travel_px,
+        reception_decel_fraction=config.reception_decel_fraction,
+        touch_min_ball_speed_px_per_s=config.touch_min_ball_speed_px_per_s,
     )
     if config.event_model_name:
         print(f"Running event spotter: {config.event_model_name}")

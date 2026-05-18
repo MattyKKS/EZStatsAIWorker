@@ -57,10 +57,20 @@ class PipelineConfig(BaseModel):
     # ── Pass ────────────────────────────────────────────────────────────────
     pass_min_speed_cms: float = Field(default=250.0, gt=0,
         description="Minimum ball speed in cm/s to enter IN_FLIGHT (real pass vs slow drift)")
-    pass_min_speed_px_per_s: float = Field(default=200.0, gt=0,
-        description="Pixel fallback for pass_min_speed_cms")
-    ball_direction_change_min_deg: float = Field(default=35.0, gt=0, lt=180.0,
-        description="Direction change required for slow direct-possession pass detection")
+    pass_min_speed_px_per_s: float = Field(default=150.0, gt=0,
+        description="Pixel fallback for pass_min_speed_cms (150px/s = 6px/frame allows slow goalkeeper rolls)")
+    ball_direction_change_min_deg: float = Field(default=55.0, gt=0, lt=180.0,
+        description="Direction change required for slow direct-possession pass detection (raised from 35 — noise rarely exceeds 55°)")
+    pass_min_flight_frames: int = Field(default=3, ge=1,
+        description="Min frames ball must be in flight before reception accepted")
+    owner_min_possession_frames: int = Field(default=4, ge=1,
+        description="Min frames owner held ball BEFORE kicking (evaluated at launch time, not reception). Shots from flight require 2x this value.")
+    pass_min_ball_travel_px: float = Field(default=60.0, gt=0,
+        description="Min ball travel distance (launch→reception, normalized px) to confirm a real pass")
+    reception_decel_fraction: float = Field(default=1.0, gt=0, le=1.0,
+        description="Disabled (1.0). Set <1.0 to require ball to slow before reception accumulates.")
+    touch_min_ball_speed_px_per_s: float = Field(default=30.0, gt=0,
+        description="Min ball speed (px/s) to emit TOUCH from IDLE state. Suppresses false touches when ball is static near players (kickoff bystanders).")
     # ── Shot ────────────────────────────────────────────────────────────────
     shot_min_speed_cms: float = Field(default=1200.0, gt=0,
         description="Minimum ball launch speed in cm/s to classify as shot (12 m/s)")

@@ -8,6 +8,7 @@ from typing import List, Optional
 import cv2
 import numpy as np
 import supervision as sv
+from scipy.optimize import linear_sum_assignment
 from tqdm import tqdm
 
 from ez_worker.schemas import BBox, Event, TrackObservation, VideoMeta
@@ -323,6 +324,10 @@ def render_stats_video(
 
     # Tutorial-exact ByteTrack
     tracker = sv.ByteTrack(minimum_consecutive_frames=3)
+    # Per-track team vote accumulator — records which team each track was shown as
+    # in the video. Written to video_track_teams.json after render for apply_clusters to use.
+    from collections import Counter as _Counter
+    _track_team_votes: dict[int, _Counter] = defaultdict(lambda: _Counter())
 
     # Ball detector (optional)
     ball_detector = None
@@ -358,6 +363,18 @@ def render_stats_video(
     # Per-GK team lock — goalkeepers never switch sides so first stable
     # assignment is locked to prevent frame-to-frame flipping
     gk_team_cache: dict[int, int] = {}
+
+    # Stable per-track team from pipeline clustering (prevents per-frame flickering).
+    # Loaded from player_labels.json written by apply-team-clusters before this step.
+    _stable_teams: dict[int, int] = {}
+    _pl_path = run_dir / "player_labels.json"
+    if _pl_path.exists():
+        _pl_data = json.loads(_pl_path.read_text(encoding="utf-8"))
+        for _tid_str, _label in _pl_data.items():
+            if _label.startswith("T1"):
+                _stable_teams[int(_tid_str)] = 0
+            elif _label.startswith("T2"):
+                _stable_teams[int(_tid_str)] = 1
 
     frame_index = 0
     try:
@@ -431,11 +448,63 @@ def render_stats_video(
                 for _i, _tid in enumerate(all_dets.tracker_id):
                     if int(_tid) in known_referee_tids:
                         color_lookup[_i] = REFEREE_CLASS_ID
-            labels = (
-                [str(tid) for tid in all_dets.tracker_id]
-                if all_dets.tracker_id is not None
-                else [""] * len(all_dets)
+
+            # Match each live detection to a pre-tracked player from tracks.json
+            # so the displayed ID matches events.json / match_report.json.
+            # Uses Hungarian assignment (1-to-1) so two live detections can never
+            # both claim the same pipeline track — eliminates most overlap ID swaps.
+            _pretrack_pts = [
+                (
+                    (t.bbox.x1 + t.bbox.x2) / 2 * video.width,
+                    t.bbox.y2 * video.height,
+                    t.track_id,
+                )
+                for t in frame_tracks
+                if t.label in ("player", "goalkeeper")
+            ]
+            _live_bcs = (
+                all_dets.get_anchors_coordinates(sv.Position.BOTTOM_CENTER)
+                if len(all_dets) > 0 else np.empty((0, 2))
             )
+
+            # Build per-frame live_idx → pipeline_tid map via Hungarian assignment.
+            _frame_tid_map: dict[int, int] = {}
+            if _pretrack_pts and len(_live_bcs) > 0:
+                _MATCH_DIST = 80.0
+                n_live = len(_live_bcs)
+                n_pre = len(_pretrack_pts)
+                cost = np.full((n_live, n_pre), fill_value=1e6)
+                for _i, (_lx, _ly) in enumerate(_live_bcs):
+                    for _j, (_px, _py, _) in enumerate(_pretrack_pts):
+                        _d = ((_lx - _px) ** 2 + (_ly - _py) ** 2) ** 0.5
+                        if _d <= _MATCH_DIST:
+                            cost[_i, _j] = _d
+                _rows, _cols = linear_sum_assignment(cost)
+                for _i, _j in zip(_rows, _cols):
+                    if cost[_i, _j] < 1e6:
+                        _frame_tid_map[_i] = _pretrack_pts[_j][2]
+
+            def _resolve_tid(live_idx: int, live_tid: int) -> int:
+                return _frame_tid_map.get(live_idx, live_tid)
+
+            # Override color_lookup with stable pipeline team to prevent flickering.
+            # Live per-frame classifier still runs for new/unmatched players.
+            if all_dets.tracker_id is not None and _stable_teams:
+                for _si, _stid in enumerate(all_dets.tracker_id):
+                    if color_lookup[_si] == REFEREE_CLASS_ID:
+                        continue
+                    _spid = _resolve_tid(_si, int(_stid))
+                    if _spid in _stable_teams:
+                        color_lookup[_si] = _stable_teams[_spid]
+
+            if all_dets.tracker_id is not None:
+                labels = [
+                    "REF" if color_lookup[i] == REFEREE_CLASS_ID
+                    else f"T{color_lookup[i]+1}#{_resolve_tid(i, int(tid))}"
+                    for i, tid in enumerate(all_dets.tracker_id)
+                ]
+            else:
+                labels = [""] * len(all_dets)
 
             # 7. Annotate ellipses (tutorial-exact)
             if len(all_dets) > 0:
@@ -502,11 +571,36 @@ def render_stats_video(
                 except Exception:
                     pass
 
+            # Record per-track team shown this frame using pipeline track IDs
+            if all_dets.tracker_id is not None:
+                for _vi, _vtid in enumerate(all_dets.tracker_id):
+                    _vteam = int(color_lookup[_vi])
+                    if _vteam != REFEREE_CLASS_ID:
+                        _pipeline_tid = _resolve_tid(_vi, int(_vtid))
+                        _track_team_votes[_pipeline_tid][_vteam] += 1
+
             writer.write(frame)
             frame_index += 1
     finally:
         cap.release()
         writer.release()
+
+    if known_referee_tids:
+        (run_dir / "referee_track_ids.json").write_text(
+            json.dumps(sorted(known_referee_tids)), encoding="utf-8"
+        )
+
+    # Write majority team per track as shown in the video.
+    # apply_clusters reads this on a second pass to ensure label consistency.
+    if _track_team_votes:
+        video_track_teams = {
+            str(tid): int(votes.most_common(1)[0][0])
+            for tid, votes in _track_team_votes.items()
+            if votes
+        }
+        (run_dir / "video_track_teams.json").write_text(
+            json.dumps(video_track_teams, indent=2), encoding="utf-8"
+        )
 
     return output_path
 

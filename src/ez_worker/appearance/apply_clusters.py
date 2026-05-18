@@ -216,6 +216,14 @@ def apply_team_clusters(run_dir: Path) -> Path:
     return output_path
 
 
+def _make_player_label(track_id: int, team_id: int | None, referee_ids: set[int]) -> str:
+    if track_id in referee_ids:
+        return f"REF#{track_id}"
+    if team_id is None:
+        return f"#{track_id}"
+    return f"T{team_id + 1}#{track_id}"
+
+
 def _rebuild_match_report(
     run_dir: Path,
     enriched_tracks: list[dict],
@@ -224,6 +232,12 @@ def _rebuild_match_report(
     events_path = run_dir / "events.json"
     events = json.loads(events_path.read_text(encoding="utf-8")) if events_path.exists() else []
     video_meta = json.loads((run_dir / "video_meta.json").read_text(encoding="utf-8"))
+
+    ref_ids_path = run_dir / "referee_track_ids.json"
+    referee_ids: set[int] = (
+        set(json.loads(ref_ids_path.read_text(encoding="utf-8")))
+        if ref_ids_path.exists() else set()
+    )
 
     team_votes: dict[int, Counter] = defaultdict(Counter)
     for obs in enriched_tracks:
@@ -243,6 +257,9 @@ def _rebuild_match_report(
     players = []
     for s in enriched_stats:
         tid = int(s["track_id"])
+        if tid in referee_ids:
+            continue  # refs excluded from player stats
+        team_id = s.get("team_id") if s.get("team_id") is not None else track_team.get(tid)
         crop_dir = run_dir / "player_crops" / f"track_{tid:04d}"
         crop_path = None
         if crop_dir.exists():
@@ -251,13 +268,21 @@ def _rebuild_match_report(
                 crop_path = f"player_crops/track_{tid:04d}/{crops[0].name}"
         players.append({
             "track_id": tid,
-            "team_id": s.get("team_id") if s.get("team_id") is not None else track_team.get(tid),
+            "label": _make_player_label(tid, team_id, referee_ids),
+            "team_id": team_id,
             "touches": s.get("touch_count", 0),
             "passes": s.get("pass_count", 0),
             "shots": s.get("shot_count", 0),
             "distance_px": round(float(s.get("approx_distance_px", 0)), 1),
             "crop_path": crop_path,
         })
+
+    # Write player_labels.json for cross-referencing (track_id -> label)
+    player_labels = {
+        str(p["track_id"]): p["label"]
+        for p in players
+    }
+    (run_dir / "player_labels.json").write_text(json.dumps(player_labels, indent=2), encoding="utf-8")
 
     edge_counts: Counter = Counter()
     for e in events:
@@ -267,6 +292,11 @@ def _rebuild_match_report(
     fps = video_meta.get("fps", 25.0)
     frame_count = video_meta.get("frame_count", 0)
     type_counts: Counter = Counter(e.get("event_type") for e in events)
+
+    def _label(tid: int | None) -> str | None:
+        if tid is None:
+            return None
+        return player_labels.get(str(tid), f"#{tid}")
 
     report = {
         "match_id": run_dir.name,
@@ -281,13 +311,16 @@ def _rebuild_match_report(
                 "frame": e.get("frame_index"),
                 "time_s": e.get("time_seconds"),
                 "actor": e.get("actor_track_id"),
+                "actor_label": _label(e.get("actor_track_id")),
                 "target": e.get("target_track_id"),
+                "target_label": _label(e.get("target_track_id")),
                 "details": e.get("details"),
             }
             for e in events
+            if e.get("actor_track_id") not in referee_ids
         ],
         "pass_network": {
-            "nodes": [{"id": p["track_id"], "team_id": p["team_id"]} for p in players],
+            "nodes": [{"id": p["track_id"], "label": p["label"], "team_id": p["team_id"]} for p in players],
             "edges": [
                 {"from": src, "to": dst, "count": cnt}
                 for (src, dst), cnt in sorted(edge_counts.items(), key=lambda x: -x[1])
