@@ -68,6 +68,7 @@ def run_analysis(video_path: Path, config: PipelineConfig) -> Path:
         shot_min_speed_px_per_s=config.shot_min_speed_px_per_s,
         shot_no_catch_seconds=config.shot_no_catch_seconds,
         ball_direction_change_min_deg=config.ball_direction_change_min_deg,
+        enable_direct_possession_path=config.enable_direct_possession_path,
         clearance_min_flight_seconds=config.clearance_min_flight_seconds,
         clearance_min_arc_frac=config.clearance_min_arc_frac,
         pass_min_flight_frames=config.pass_min_flight_frames,

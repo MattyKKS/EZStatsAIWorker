@@ -49,35 +49,37 @@ class PipelineConfig(BaseModel):
     ball_track_id: int = Field(default=0)
     # ── Possession ──────────────────────────────────────────────────────────
     possession_distance_threshold_cm: float = Field(default=200.0, gt=0,
-        description="Ball ownership radius in cm (used when pitch coords available)")
-    possession_distance_threshold_px: float = Field(default=50.0, gt=0,
-        description="Pixel-space fallback when homography is unavailable")
-    possession_min_seconds: float = Field(default=0.15, gt=0,
-        description="Seconds ball must stay near a player to confirm ownership")
+        description="Ball ownership radius in cm (used when pitch coords available; ~2 m — FM standard)")
+    possession_distance_threshold_px: float = Field(default=80.0, gt=0,
+        description="Pixel-space fallback (normalised by player height) — 80 normalised px ≈ 2 m")
+    possession_min_seconds: float = Field(default=0.25, gt=0,
+        description="Seconds ball must stay near player feet to confirm ownership (raised 0.15→0.25)")
     # ── Pass ────────────────────────────────────────────────────────────────
     pass_min_speed_cms: float = Field(default=250.0, gt=0,
-        description="Minimum ball speed in cm/s to enter IN_FLIGHT (real pass vs slow drift)")
-    pass_min_speed_px_per_s: float = Field(default=150.0, gt=0,
-        description="Pixel fallback for pass_min_speed_cms (150px/s = 6px/frame allows slow goalkeeper rolls)")
+        description="Minimum ball speed in cm/s to enter IN_FLIGHT")
+    pass_min_speed_px_per_s: float = Field(default=350.0, gt=0,
+        description="Pixel fallback for pass_min_speed_cms (raised 150→350 — filters slow drifts)")
     ball_direction_change_min_deg: float = Field(default=55.0, gt=0, lt=180.0,
-        description="Direction change required for slow direct-possession pass detection (raised from 35 — noise rarely exceeds 55°)")
-    pass_min_flight_frames: int = Field(default=3, ge=1,
-        description="Min frames ball must be in flight before reception accepted")
-    owner_min_possession_frames: int = Field(default=4, ge=1,
-        description="Min frames owner held ball BEFORE kicking (evaluated at launch time, not reception). Shots from flight require 2x this value.")
+        description="Direction change for direct-possession path (only used when enable_direct_possession_path=True)")
+    enable_direct_possession_path: bool = Field(default=False,
+        description="Enable POSSESSED→POSSESSED direct pass detection. Disabled by default — fires on dribbles, ricochets, and airborne projections in broadcast footage.")
+    pass_min_flight_frames: int = Field(default=6, ge=1,
+        description="Min frames ball must be in flight before reception accepted (raised 3→6)")
+    owner_min_possession_frames: int = Field(default=8, ge=1,
+        description="Min frames owner held ball BEFORE kicking (raised 4→8; shots from flight require 2×)")
     pass_min_ball_travel_px: float = Field(default=60.0, gt=0,
-        description="Min ball travel distance (launch→reception, normalized px) to confirm a real pass")
-    reception_decel_fraction: float = Field(default=1.0, gt=0, le=1.0,
-        description="Disabled (1.0). Set <1.0 to require ball to slow before reception accumulates.")
-    touch_min_ball_speed_px_per_s: float = Field(default=30.0, gt=0,
-        description="Min ball speed (px/s) to emit TOUCH from IDLE state. Suppresses false touches when ball is static near players (kickoff bystanders).")
+        description="Min ball travel distance (launch→reception, normalised px) to confirm a real pass")
+    reception_decel_fraction: float = Field(default=0.65, gt=0, le=1.0,
+        description="Ball must slow to this fraction of launch speed before reception frames accumulate (0.65 = must slow 35%)")
+    touch_min_ball_speed_px_per_s: float = Field(default=80.0, gt=0,
+        description="Min ball speed (px/s) to emit TOUCH from IDLE state (raised 30→80)")
     # ── Shot ────────────────────────────────────────────────────────────────
     shot_min_speed_cms: float = Field(default=1200.0, gt=0,
         description="Minimum ball launch speed in cm/s to classify as shot (12 m/s)")
     shot_min_speed_px_per_s: float = Field(default=600.0, gt=0,
         description="Pixel fallback for shot_min_speed_cms")
-    shot_no_catch_seconds: float = Field(default=1.0, gt=0,
-        description="Seconds with no reception after launch to confirm shot")
+    shot_no_catch_seconds: float = Field(default=2.5, gt=0,
+        description="Seconds with no reception after launch to confirm shot (raised 1.0→2.5 for long balls)")
     # ── Clearance / high ball ────────────────────────────────────────────────
     clearance_min_flight_seconds: float = Field(default=1.2, gt=0,
         description="Flight longer than this with arc = clearance/long_ball, not shot")
