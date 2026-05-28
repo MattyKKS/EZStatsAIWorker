@@ -113,6 +113,9 @@ def detect_events(
     vel_history: list[tuple[float, float]] = []
     vel_window = max(3, int(video.fps * 0.25))  # 250 ms
 
+    airborne_streak: int = 0
+    _max_airborne_frames = max(3, int(2.0 * video.fps))
+
     scene_changes = scene_changes or set()
     events: list[Event] = []
 
@@ -129,6 +132,7 @@ def detect_events(
             candidate_count   = 0
             flight_frame      = None
             launch_ball_cx    = launch_ball_cy = None
+            airborne_streak   = 0
             vel_history.clear()
             continue
 
@@ -157,6 +161,15 @@ def detect_events(
             and players
             and _is_ball_airborne(ball, players, video)
         )
+        # Temporal cap: a real airborne ball lands within 2s. If ball_airborne
+        # has been True for longer, the detector is latching onto a false
+        # positive (stands, misdetection). Override and let possession resume.
+        if ball_airborne:
+            airborne_streak += 1
+            if airborne_streak > _max_airborne_frames:
+                ball_airborne = False
+        else:
+            airborne_streak = 0
 
         # ══════════════════════════════════════════════════════════════════
         # Phase: IN_FLIGHT
@@ -187,11 +200,36 @@ def detect_events(
                     if ball_decelerating and not ball_airborne:
                         # Only count reception frames when ball is grounded —
                         # airborne ball over a player's head is NOT a reception.
+
                         if candidate_tid == closest.track_id:
                             candidate_count += 1
                         else:
-                            candidate_tid   = closest.track_id
-                            candidate_count = 1
+                            # Directional filter (Priority 4): when considering a NEW
+                            # candidate, skip them if they are clearly in the wrong
+                            # direction (>120° off the launch-to-current travel vector).
+                            # Applied only for NEW candidates so that a receiver who was
+                            # correctly accumulated is never dropped because the ball
+                            # slightly overshot their position.
+                            _skip_dir = False
+                            if launch_ball_cx is not None:
+                                _ball_cx  = (ball.bbox.x1 + ball.bbox.x2) / 2 * video.width
+                                _ball_cy  = ball.bbox.cy * video.height
+                                _travel_x = _ball_cx - launch_ball_cx * video.width
+                                _travel_y = _ball_cy - launch_ball_cy * video.height
+                                _travel_m = math.hypot(_travel_x, _travel_y)
+                                if _travel_m > 50:  # need 50px travel to have a reliable direction
+                                    _cand_dx = (closest.bbox.x1 + closest.bbox.x2) / 2 * video.width - _ball_cx
+                                    _cand_dy = closest.bbox.cy * video.height - _ball_cy
+                                    _cand_m  = math.hypot(_cand_dx, _cand_dy) + 1e-6
+                                    _cos = (_travel_x * _cand_dx + _travel_y * _cand_dy) / (_travel_m * _cand_m)
+                                    if _cos < -0.5:  # >120 degrees — clearly wrong direction
+                                        _skip_dir = True
+
+                            if not _skip_dir:
+                                # Decay rather than hard-reset: a 1–2 frame bystander blip
+                                # shouldn't wipe out accumulated evidence for the real receiver.
+                                candidate_count = max(1, candidate_count - 2) if candidate_count > 2 else 1
+                                candidate_tid   = closest.track_id
                     elif not ball_decelerating:
                         candidate_tid   = None
                         candidate_count = 0
@@ -334,6 +372,7 @@ def detect_events(
                     launch_ball_cx    = launch_ball_cy = None
                     candidate_tid     = None
                     candidate_count   = 0
+                    airborne_streak   = 0
 
             continue
 
@@ -343,21 +382,35 @@ def detect_events(
         if ball is None or not players:
             continue
 
-        # Skip possession logic when ball is airborne in PIXEL mode.
-        # In pitch mode keep the normal d>poss_dist path because pitch-mode
-        # cm/s velocity is unreliable for an airborne ball — we rely on the
-        # normal possession-zone exit (d > 200 cm) to trigger IN_FLIGHT there.
-        if ball_airborne and not use_pitch:
-            if phase == _Phase.POSSESSED and speed >= pass_speed:
-                # Ball left possession zone AND is airborne → transition to flight
-                launch_ball_cx = (ball.bbox.x1 + ball.bbox.x2) / 2
-                launch_ball_cy = (ball.bbox.y1 + ball.bbox.y2) / 2
-                phase        = _Phase.IN_FLIGHT
-                flight_frame = frame_index
-                flight_speed = speed
-                flight_ball_y   = []
-                candidate_tid   = None
-                candidate_count = 0
+        # When ball is airborne, homography projects it to a WRONG pitch position
+        # (camera sees the ball elevated, not on the ground plane).  Use pixel-space
+        # distance as the reliable fallback for the possession-zone-exit check,
+        # symmetric with the IN_FLIGHT airborne path.
+        if ball_airborne:
+            if not use_pitch:
+                # Pixel mode: original behaviour — speed gate guards the transition.
+                if phase == _Phase.POSSESSED and speed >= pass_speed:
+                    launch_ball_cx = (ball.bbox.x1 + ball.bbox.x2) / 2
+                    launch_ball_cy = (ball.bbox.y1 + ball.bbox.y2) / 2
+                    phase        = _Phase.IN_FLIGHT
+                    flight_frame = frame_index
+                    flight_speed = speed
+                    flight_ball_y   = []
+                    candidate_tid   = None
+                    candidate_count = 0
+            else:
+                # Pitch mode: cm distance is unreliable when airborne.
+                # Pixel distance tells us if the ball has genuinely left the owner.
+                _, d_px = _closest_player(ball, players, frame_index, video, False, None, None)
+                if phase == _Phase.POSSESSED and d_px > possession_distance_threshold_px:
+                    launch_ball_cx = (ball.bbox.x1 + ball.bbox.x2) / 2
+                    launch_ball_cy = (ball.bbox.y1 + ball.bbox.y2) / 2
+                    phase        = _Phase.IN_FLIGHT
+                    flight_frame = frame_index
+                    flight_speed = speed
+                    flight_ball_y   = []
+                    candidate_tid   = None
+                    candidate_count = 0
             continue
 
         closest, d = _closest_player(
@@ -407,7 +460,10 @@ def detect_events(
             phase             = _Phase.POSSESSED
             owner_tid         = closest.track_id
             owner_team        = closest.team_id
-            owner_since_frame = frame_index
+            # Back-date to when the ball first entered the possession zone, not when
+            # confirmed.  Gate 3 measures actual possession duration — candidate_count
+            # frames have already elapsed, so subtract them from the confirmation frame.
+            owner_since_frame = frame_index - (candidate_count - 1)
             owner_from_flight = False
             if speed >= touch_speed:
                 dist_key = "distance_cm" if use_pitch else "distance_px"
