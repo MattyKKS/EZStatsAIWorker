@@ -114,7 +114,8 @@ def detect_events(
     vel_window = max(3, int(video.fps * 0.25))  # 250 ms
 
     airborne_streak: int = 0
-    _max_airborne_frames = max(3, int(2.0 * video.fps))
+    _max_airborne_idle   = max(3, int(2.0 * video.fps))   # 2s — misdetection / stands cap
+    _max_airborne_flight = max(3, int(6.0 * video.fps))   # 6s — genuine clearance flight
 
     scene_changes = scene_changes or set()
     events: list[Event] = []
@@ -161,12 +162,13 @@ def detect_events(
             and players
             and _is_ball_airborne(ball, players, video)
         )
-        # Temporal cap: a real airborne ball lands within 2s. If ball_airborne
-        # has been True for longer, the detector is latching onto a false
-        # positive (stands, misdetection). Override and let possession resume.
+        # Temporal cap: clears false airborne latch.
+        # 6s cap during IN_FLIGHT (genuine clearances can stay aloft that long);
+        # 2s cap in all other phases (stands / pixel misdetection).
+        _airborne_cap = _max_airborne_flight if phase == _Phase.IN_FLIGHT else _max_airborne_idle
         if ball_airborne:
             airborne_streak += 1
-            if airborne_streak > _max_airborne_frames:
+            if airborne_streak > _airborne_cap:
                 ball_airborne = False
         else:
             airborne_streak = 0
@@ -177,6 +179,19 @@ def detect_events(
         if phase == _Phase.IN_FLIGHT:
             if ball is not None:
                 flight_ball_y.append(ball.bbox.cy * video.height)
+
+            # Estimate landing frame via parabolic arc symmetry; relax thresholds
+            # in a ±1.2s window around the predicted landing to catch reception even
+            # when the ball decelerates slowly or the closest-player flickers.
+            _predicted_landing = _predict_landing_frame(
+                flight_ball_y, flight_frame or frame_index, video.fps
+            )
+            _landing_window = int(1.2 * video.fps)
+            _near_landing   = (
+                _predicted_landing is not None
+                and abs(frame_index - _predicted_landing) <= _landing_window
+            )
+            _eff_poss_min = max(1, poss_min_frames // 2) if _near_landing else poss_min_frames
 
             if ball is not None and players:
                 # When ball is airborne in pitch mode, homography projects to a
@@ -193,6 +208,11 @@ def detect_events(
                         use_pitch, player_pitch_pos, ball_pitch_pos
                     )
                     _eff_poss_dist = poss_dist
+                # Near the predicted landing, double the distance threshold — the
+                # ball may still be a meter or two away as it decelerates into the
+                # player's feet.
+                if _near_landing:
+                    _eff_poss_dist *= 2
                 if d <= _eff_poss_dist:
                     decel_thresh = flight_speed * reception_decel_fraction
                     ball_decelerating = (speed <= decel_thresh) or (flight_speed < pass_speed * 2)
@@ -235,7 +255,7 @@ def detect_events(
                         candidate_count = 0
                     # else: ball_airborne — don't reset or increment
 
-                    if candidate_count >= poss_min_frames:
+                    if candidate_count >= _eff_poss_min:
                         flight_elapsed = frame_index - (flight_frame or frame_index)
 
                         # Gate 1: self-reception
@@ -444,12 +464,23 @@ def detect_events(
             candidate_tid   = closest.track_id
             candidate_count = 1
 
+        # Close-contact fast path: ball within ~0.8 m (player's feet) is a
+        # definite physical touch — bypass the frame-count requirement.
+        _close_contact_thresh = 80.0 if use_pitch else 40.0
+        _close_contact = d <= _close_contact_thresh
+        if _close_contact:
+            candidate_count = poss_min_frames  # jump straight to confirmation
+
         if candidate_count < poss_min_frames:
             continue
 
         # ── Possession confirmed ────────────────────────────────────────
         if phase == _Phase.IDLE:
-            if speed >= touch_speed and vel is not None:
+            if speed >= touch_speed and vel is not None and not _close_contact:
+                # Velocity direction check: skip it when ball is in close contact
+                # (ball at player's feet may be moving away because it was just
+                # kicked — that IS a real touch). Only filter balls that are still
+                # far away and clearly exiting the zone without being touched.
                 b2p_x = (closest.bbox.cx - (ball.bbox.x1 + ball.bbox.x2) / 2) * video.width
                 b2p_y = (closest.bbox.cy - (ball.bbox.y1 + ball.bbox.y2) / 2) * video.height
                 if vel[0] * b2p_x + vel[1] * b2p_y < 0:
@@ -463,7 +494,9 @@ def detect_events(
             # Back-date to when the ball first entered the possession zone, not when
             # confirmed.  Gate 3 measures actual possession duration — candidate_count
             # frames have already elapsed, so subtract them from the confirmation frame.
-            owner_since_frame = frame_index - (candidate_count - 1)
+            # Exception: close-contact fast path forces candidate_count to poss_min_frames
+            # even though possession only started this frame — don't back-date in that case.
+            owner_since_frame = frame_index if _close_contact else frame_index - (candidate_count - 1)
             owner_from_flight = False
             if speed >= touch_speed:
                 dist_key = "distance_cm" if use_pitch else "distance_px"
@@ -738,6 +771,34 @@ def _is_high_arc(y_positions: list[float], min_arc_px: float) -> bool:
     mid_lo  = int(len(y_positions) * 0.15)
     mid_hi  = int(len(y_positions) * 0.85)
     return mid_lo <= min_idx <= mid_hi
+
+
+def _predict_landing_frame(
+    flight_ball_y: list[float],
+    flight_frame: int,
+    fps: float,
+) -> int | None:
+    """Estimate the frame at which a kicked ball will land using parabolic symmetry.
+
+    Ball y in pixel coords is smaller when the ball is higher in the frame.
+    The arc peak = the minimum y value. Assuming a symmetric parabola:
+        landing_frame ≈ flight_frame + 2 * frames_to_peak
+    Returns None if there is insufficient data to make a reliable estimate.
+    """
+    min_pts = max(4, int(fps * 0.5))
+    if len(flight_ball_y) < min_pts:
+        return None
+    min_y    = min(flight_ball_y)
+    peak_idx = flight_ball_y.index(min_y)
+    if peak_idx < 3:
+        return None
+    post_peak = flight_ball_y[peak_idx:]
+    if len(post_peak) < 3:
+        return None
+    # Only trust the prediction if the ball has clearly started descending
+    if post_peak[-1] <= min_y + 20:
+        return None
+    return flight_frame + 2 * peak_idx
 
 
 def _dedupe_dense_events(events: list[Event], min_frame_gap: int = 6) -> list[Event]:

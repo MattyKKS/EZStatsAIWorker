@@ -4,7 +4,9 @@
       "WebSearch",
       "WebFetch(domain:github.com)",
       "Bash(.venv/Scripts/python -c ' *)",
-      "WebFetch(domain:arxiv.org)"
+      "WebFetch(domain:arxiv.org)",
+      "PowerShell(& \"c:\\\\Users\\\\kaung\\\\anaconda3\\\\Scripts\\\\conda.exe\" run -n se_411 python -c \"import ez_worker; print\\(ez_worker.__file__\\)\" 2>&1)",
+      "Read(//c/Users/kaung/anaconda3/**)"
     ]
   }
 }

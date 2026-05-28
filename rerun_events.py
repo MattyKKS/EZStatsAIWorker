@@ -29,6 +29,10 @@ import shutil
 import sys
 from pathlib import Path
 
+# Allow running as a standalone script from the project root without needing
+# the package to be pip-installed — just add src/ to the search path.
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+
 import cv2
 import numpy as np
 

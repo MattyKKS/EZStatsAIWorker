@@ -61,6 +61,11 @@ Invoke-Step "detect-pitch-keypoints" -AllowFailure { ez-worker detect-pitch-keyp
 
 Invoke-Step "render-stats-video" { ez-worker render-stats-video --run-dir $runDir --pitch-model-path artifacts/pitch/football-pitch-detectionV2.pt --player-model-path artifacts/training/roboflow_detector_v1_light/weights/best.pt }
 
+# Re-run event detection with homography-projected pitch coordinates (build H from
+# pitch_keypoints.json written above, project all player/ball positions to cm, then
+# call detect_events with those pitch-space coords). Overwrites events.json.
+Invoke-Step "rerun-events" { python rerun_events.py $runDir }
+
 # Re-apply team clusters using the video-consistent team assignments written by render-stats-video.
 # This ensures match_report/player_labels use the same T1/T2 labels the user sees in the video.
 Invoke-Step "apply-team-clusters (sync)" { ez-worker apply-team-clusters --run-dir $runDir }
