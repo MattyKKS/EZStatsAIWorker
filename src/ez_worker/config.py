@@ -65,8 +65,8 @@ class PipelineConfig(BaseModel):
         description="Enable POSSESSED→POSSESSED direct pass detection. Disabled by default — fires on dribbles, ricochets, and airborne projections in broadcast footage.")
     pass_min_flight_frames: int = Field(default=6, ge=1,
         description="Min frames ball must be in flight before reception accepted (raised 3→6)")
-    owner_min_possession_frames: int = Field(default=8, ge=1,
-        description="Min frames owner held ball BEFORE kicking (raised 4→8; shots from flight require 2×)")
+    owner_min_possession_frames: int = Field(default=5, ge=1,
+        description="Min frames owner held ball BEFORE kicking (0.2s at 25fps; first-touch receivers need only 2 frames)")
     pass_min_ball_travel_px: float = Field(default=60.0, gt=0,
         description="Min ball travel distance (launch→reception, normalised px) to confirm a real pass")
     reception_decel_fraction: float = Field(default=0.65, gt=0, le=1.0,

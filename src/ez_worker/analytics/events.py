@@ -46,7 +46,7 @@ def detect_events(
     clearance_min_arc_frac: float = 0.04,
     # ── Quality gates ───────────────────────────────────────────────────────
     pass_min_flight_frames: int = 6,                   # raised: 3 → 6
-    owner_min_possession_frames: int = 8,              # raised: 6 → 8 (also fixes config mismatch)
+    owner_min_possession_frames: int = 5,              # lowered: 8 → 5 (0.2s; first-touch path handles very short holds)
     pass_min_ball_travel_px: float = 60.0,
     reception_decel_fraction: float = 0.65,            # enabled: 1.0 → 0.65
     # ── Scene changes ───────────────────────────────────────────────────────
@@ -173,6 +173,19 @@ def detect_events(
         else:
             airborne_streak = 0
 
+        # Height ratio: 0.0 = ball at feet, 1.0 = ball at head-top, >1.0 = above head.
+        # Computed whenever ball is airborne — used to distinguish play-height contacts
+        # (knee / waist / chest / header, height < 0.85) from truly in-flight balls
+        # (height >= 0.85, ball above head level, no contact possible).
+        _ball_hr       = (
+            _ball_height_ratio(ball, players, video)
+            if (ball_airborne and ball is not None and players)
+            else 0.0
+        )
+        # >= 1.10: ball is above full-arm reach (no contact possible for a standing player).
+        # Headers happen at hr ≈ 0.85-1.05; this threshold keeps them in the play-height zone.
+        _truly_airborne = ball_airborne and _ball_hr >= 1.10
+
         # ══════════════════════════════════════════════════════════════════
         # Phase: IN_FLIGHT
         # ══════════════════════════════════════════════════════════════════
@@ -214,46 +227,60 @@ def detect_events(
                 if _near_landing:
                     _eff_poss_dist *= 2
                 if d <= _eff_poss_dist:
-                    decel_thresh = flight_speed * reception_decel_fraction
-                    ball_decelerating = (speed <= decel_thresh) or (flight_speed < pass_speed * 2)
+                    # Close-contact in flight: ball physically at player — confirm
+                    # immediately regardless of deceleration (volley / first touch /
+                    # redirect will not show deceleration in the velocity signal).
+                    # Only fires when ball is NOT airborne: pixel-space projection during
+                    # clearance arcs can look close to a player without the ball being
+                    # physically near them.  Tight threshold (30 cm pitch / 20 px pixel).
+                    _fc_thresh   = 30.0 if use_pitch else 20.0
+                    _flight_close = d <= _fc_thresh and not ball_airborne
 
-                    if ball_decelerating and not ball_airborne:
-                        # Only count reception frames when ball is grounded —
-                        # airborne ball over a player's head is NOT a reception.
+                    if _flight_close:
+                        candidate_tid   = closest.track_id
+                        candidate_count = _eff_poss_min
+                    else:
+                        decel_thresh = flight_speed * reception_decel_fraction
+                        ball_decelerating = (speed <= decel_thresh) or (flight_speed < pass_speed * 2)
 
-                        if candidate_tid == closest.track_id:
-                            candidate_count += 1
-                        else:
-                            # Directional filter (Priority 4): when considering a NEW
-                            # candidate, skip them if they are clearly in the wrong
-                            # direction (>120° off the launch-to-current travel vector).
-                            # Applied only for NEW candidates so that a receiver who was
-                            # correctly accumulated is never dropped because the ball
-                            # slightly overshot their position.
-                            _skip_dir = False
-                            if launch_ball_cx is not None:
-                                _ball_cx  = (ball.bbox.x1 + ball.bbox.x2) / 2 * video.width
-                                _ball_cy  = ball.bbox.cy * video.height
-                                _travel_x = _ball_cx - launch_ball_cx * video.width
-                                _travel_y = _ball_cy - launch_ball_cy * video.height
-                                _travel_m = math.hypot(_travel_x, _travel_y)
-                                if _travel_m > 50:  # need 50px travel to have a reliable direction
-                                    _cand_dx = (closest.bbox.x1 + closest.bbox.x2) / 2 * video.width - _ball_cx
-                                    _cand_dy = closest.bbox.cy * video.height - _ball_cy
-                                    _cand_m  = math.hypot(_cand_dx, _cand_dy) + 1e-6
-                                    _cos = (_travel_x * _cand_dx + _travel_y * _cand_dy) / (_travel_m * _cand_m)
-                                    if _cos < -0.5:  # >120 degrees — clearly wrong direction
-                                        _skip_dir = True
+                        if ball_decelerating and (not ball_airborne or not _truly_airborne):
+                            # Count reception frames when ball is grounded OR at play
+                            # height (knee/waist/chest/head) — only block when ball is
+                            # well above head level (_truly_airborne).
 
-                            if not _skip_dir:
-                                # Decay rather than hard-reset: a 1–2 frame bystander blip
-                                # shouldn't wipe out accumulated evidence for the real receiver.
-                                candidate_count = max(1, candidate_count - 2) if candidate_count > 2 else 1
-                                candidate_tid   = closest.track_id
-                    elif not ball_decelerating:
-                        candidate_tid   = None
-                        candidate_count = 0
-                    # else: ball_airborne — don't reset or increment
+                            if candidate_tid == closest.track_id:
+                                candidate_count += 1
+                            else:
+                                # Directional filter (Priority 4): when considering a NEW
+                                # candidate, skip them if they are clearly in the wrong
+                                # direction (>120° off the launch-to-current travel vector).
+                                # Applied only for NEW candidates so that a receiver who was
+                                # correctly accumulated is never dropped because the ball
+                                # slightly overshot their position.
+                                _skip_dir = False
+                                if launch_ball_cx is not None:
+                                    _ball_cx  = (ball.bbox.x1 + ball.bbox.x2) / 2 * video.width
+                                    _ball_cy  = ball.bbox.cy * video.height
+                                    _travel_x = _ball_cx - launch_ball_cx * video.width
+                                    _travel_y = _ball_cy - launch_ball_cy * video.height
+                                    _travel_m = math.hypot(_travel_x, _travel_y)
+                                    if _travel_m > 50:  # need 50px travel to have a reliable direction
+                                        _cand_dx = (closest.bbox.x1 + closest.bbox.x2) / 2 * video.width - _ball_cx
+                                        _cand_dy = closest.bbox.cy * video.height - _ball_cy
+                                        _cand_m  = math.hypot(_cand_dx, _cand_dy) + 1e-6
+                                        _cos = (_travel_x * _cand_dx + _travel_y * _cand_dy) / (_travel_m * _cand_m)
+                                        if _cos < -0.5:  # >120 degrees — clearly wrong direction
+                                            _skip_dir = True
+
+                                if not _skip_dir:
+                                    # Decay rather than hard-reset: a 1–2 frame bystander blip
+                                    # shouldn't wipe out accumulated evidence for the real receiver.
+                                    candidate_count = max(1, candidate_count - 2) if candidate_count > 2 else 1
+                                    candidate_tid   = closest.track_id
+                        elif not ball_decelerating:
+                            candidate_tid   = None
+                            candidate_count = 0
+                        # else: ball_airborne — don't reset or increment
 
                     if candidate_count >= _eff_poss_min:
                         flight_elapsed = frame_index - (flight_frame or frame_index)
@@ -274,9 +301,12 @@ def detect_events(
                         if flight_elapsed < pass_min_flight_frames:
                             continue
 
-                        # Gate 3: owner must have held ball long enough BEFORE kicking
+                        # Gate 3: owner must have held ball long enough BEFORE kicking.
+                        # First-touch receivers (owner_from_flight=True) only need 2 frames —
+                        # they received via a pass and may immediately redirect/volley.
                         owned_at_launch = (flight_frame or frame_index) - (owner_since_frame or flight_frame or frame_index)
-                        if owned_at_launch < owner_min_possession_frames:
+                        _min_own = max(2, int(video.fps * 0.08)) if owner_from_flight else owner_min_possession_frames
+                        if owned_at_launch < _min_own:
                             phase             = _Phase.POSSESSED
                             prev_owner_tid    = owner_tid
                             owner_tid         = closest.track_id
@@ -362,7 +392,7 @@ def detect_events(
                     speed_key = "launch_speed_cms" if use_pitch else "launch_speed_pxs"
 
                     owned_at_launch = flight_frame - (owner_since_frame or flight_frame)
-                    min_for_shot = owner_min_possession_frames * 2 if owner_from_flight else owner_min_possession_frames
+                    min_for_shot = max(2, int(video.fps * 0.08)) if owner_from_flight else owner_min_possession_frames
                     fire_event = owned_at_launch >= min_for_shot
 
                     if fire_event:
@@ -392,7 +422,9 @@ def detect_events(
                     launch_ball_cx    = launch_ball_cy = None
                     candidate_tid     = None
                     candidate_count   = 0
-                    airborne_streak   = 0
+                    # Pre-load streak so ground-mode possession fires immediately after
+                    # the timeout: the ball is landing, not still in flight.
+                    airborne_streak   = _max_airborne_idle + 1
 
             continue
 
@@ -404,8 +436,7 @@ def detect_events(
 
         # When ball is airborne, homography projects it to a WRONG pitch position
         # (camera sees the ball elevated, not on the ground plane).  Use pixel-space
-        # distance as the reliable fallback for the possession-zone-exit check,
-        # symmetric with the IN_FLIGHT airborne path.
+        # distance as the reliable fallback for the possession-zone-exit check.
         if ball_airborne:
             if not use_pitch:
                 # Pixel mode: original behaviour — speed gate guards the transition.
@@ -431,14 +462,28 @@ def detect_events(
                     flight_ball_y   = []
                     candidate_tid   = None
                     candidate_count = 0
-            continue
+            if _truly_airborne:
+                # Ball is well above head level — no aerial contact possible.
+                continue
+            # Ball is at play height (knee / waist / chest / header) — fall through
+            # to possession logic below, but use pixel-space distance because the
+            # homography ground-plane projection is unreliable for elevated balls.
 
-        closest, d = _closest_player(
-            ball, players, frame_index, video,
-            use_pitch, player_pitch_pos, ball_pitch_pos
-        )
+        if ball_airborne and not _truly_airborne:
+            # Play-height aerial contact path: use pixel-space distance normalised
+            # by the nearest player's height.  0.50 × player_height_px covers the
+            # full reach envelope (foot → outstretched arm above head).
+            closest, d = _closest_player(ball, players, frame_index, video, False, None, None)
+            _near_ph        = (closest.bbox.y2 - closest.bbox.y1) * video.height
+            _idle_poss_dist = max(40.0, _near_ph * 0.50)
+        else:
+            closest, d = _closest_player(
+                ball, players, frame_index, video,
+                use_pitch, player_pitch_pos, ball_pitch_pos
+            )
+            _idle_poss_dist = poss_dist
 
-        if d > poss_dist:
+        if d > _idle_poss_dist:
             if phase == _Phase.POSSESSED and speed >= pass_speed:
                 if ball is not None:
                     launch_ball_cx = (ball.bbox.x1 + ball.bbox.x2) / 2
@@ -464,9 +509,15 @@ def detect_events(
             candidate_tid   = closest.track_id
             candidate_count = 1
 
-        # Close-contact fast path: ball within ~0.8 m (player's feet) is a
-        # definite physical touch — bypass the frame-count requirement.
-        _close_contact_thresh = 80.0 if use_pitch else 40.0
+        # Close-contact fast path: ball physically at the player bypasses frame-count.
+        # Threshold depends on measurement space:
+        #   pitch cm (ground): 80 cm  (~player's feet / shin zone)
+        #   pixel (ground):    40 px
+        #   pixel (aerial):    25% of player bbox height (~17-20 px at midfield zoom)
+        if ball_airborne and not _truly_airborne:
+            _close_contact_thresh = max(15.0, _near_ph * 0.25)
+        else:
+            _close_contact_thresh = 80.0 if use_pitch else 40.0
         _close_contact = d <= _close_contact_thresh
         if _close_contact:
             candidate_count = poss_min_frames  # jump straight to confirmation
@@ -499,11 +550,26 @@ def detect_events(
             owner_since_frame = frame_index if _close_contact else frame_index - (candidate_count - 1)
             owner_from_flight = False
             if speed >= touch_speed:
-                dist_key = "distance_cm" if use_pitch else "distance_px"
+                # Classify contact type by ball height ratio.
+                # Aerial contacts use pixel distance — mark key accordingly.
+                _aerial = ball_airborne and not _truly_airborne
+                if _aerial:
+                    # Height thresholds from anthropometric data (fraction of player height):
+                    # header >= 0.75 (head), chest_control >= 0.50, volley < 0.50 (knee/shin)
+                    if _ball_hr >= 0.75:
+                        _contact_type = "header"
+                    elif _ball_hr >= 0.50:
+                        _contact_type = "chest_control"
+                    else:
+                        _contact_type = "volley"
+                    dist_key = "distance_px"
+                else:
+                    _contact_type = "touch"
+                    dist_key      = "distance_cm" if use_pitch else "distance_px"
                 events.append(Event(
                     frame_index=frame_index,
                     time_seconds=round(frame_index / video.fps, 2),
-                    event_type="touch",
+                    event_type=_contact_type,
                     actor_track_id=closest.track_id,
                     details={dist_key: round(d, 1)},
                 ))
@@ -521,7 +587,7 @@ def detect_events(
                         use_pitch, player_pitch_pos, ball_pitch_pos,
                     )
                     dominant = d * 2.5 < owner_d
-                    if owner_d <= poss_dist and not dominant:
+                    if owner_d <= _idle_poss_dist and not dominant:
                         continue
 
                 dir_change = _direction_change_deg(vel_history)
@@ -558,7 +624,7 @@ def detect_events(
                         use_pitch, player_pitch_pos, ball_pitch_pos,
                     )
                     dominant = d * 2.5 < owner_d
-                    if owner_d <= poss_dist and not dominant:
+                    if owner_d <= _idle_poss_dist and not dominant:
                         continue
 
             prev_owner_tid    = owner_tid
@@ -653,6 +719,45 @@ def _is_ball_airborne(
     # In image coords: smaller y = higher in frame = higher physically.
     # Airborne if ball bottom is above avg feet by > airborne_frac * player height.
     return ball_y2_px < avg_feet_y - airborne_frac * avg_player_h
+
+
+def _ball_height_ratio(
+    ball: TrackObservation,
+    players: list[TrackObservation],
+    video: VideoMeta,
+) -> float:
+    """Ball centre height as a fraction of the nearest player's bbox height.
+
+    0.0  = ball centre at player feet (ground level)
+    0.40 = knee height
+    0.55 = waist height
+    0.75 = chest / shoulder height
+    1.00 = top of player head
+    >1.0 = ball above head (truly in flight, unreachable)
+
+    Uses the same nearby-player pool as _is_ball_airborne (players within
+    3× player-height horizontal distance).  Returns 0.0 if no players nearby.
+    """
+    ball_cx_px = (ball.bbox.x1 + ball.bbox.x2) / 2 * video.width
+    ball_cy_px = (ball.bbox.y1 + ball.bbox.y2) / 2 * video.height
+
+    nearby: list[tuple[float, float]] = []  # (feet_y_px, player_height_px)
+    for p in players:
+        p_cx_px = (p.bbox.x1 + p.bbox.x2) / 2 * video.width
+        p_h_px  = (p.bbox.y2 - p.bbox.y1) * video.height
+        if p_h_px >= 15.0 and abs(p_cx_px - ball_cx_px) < p_h_px * 3:
+            nearby.append((p.bbox.y2 * video.height, p_h_px))
+
+    if not nearby:
+        return 0.0
+
+    avg_feet_y   = sum(fy for fy, _ in nearby) / len(nearby)
+    avg_player_h = sum(ph for _, ph in nearby) / len(nearby)
+    if avg_player_h < 1.0:
+        return 0.0
+
+    # Image coords: smaller y = higher in frame = physically higher.
+    return (avg_feet_y - ball_cy_px) / avg_player_h
 
 
 def _nearest_players(
