@@ -31,7 +31,7 @@ def detect_events(
     # ── Possession ─────────────────────────────────────────────────────────
     possession_distance_threshold_cm: float = 200.0,
     possession_distance_threshold_px: float = 80.0,   # ~2 m in normalised px
-    possession_min_seconds: float = 0.25,              # raised: 0.15 → 0.25
+    possession_min_seconds: float = 0.16,              # lowered: 0.25 → 0.16 (4 frames); faster re-acquisition after clearances
     # ── Pass / Shot speeds ──────────────────────────────────────────────────
     pass_min_speed_cms: float = 250.0,
     pass_min_speed_px_per_s: float = 350.0,            # raised: 150 → 350
@@ -45,7 +45,7 @@ def detect_events(
     clearance_min_flight_seconds: float = 1.2,
     clearance_min_arc_frac: float = 0.04,
     # ── Quality gates ───────────────────────────────────────────────────────
-    pass_min_flight_frames: int = 6,                   # raised: 3 → 6
+    pass_min_flight_frames: int = 4,                   # lowered: 6 → 4; catches short passes ≥ 0.16s in flight
     owner_min_possession_frames: int = 5,              # lowered: 8 → 5 (0.2s; first-touch path handles very short holds)
     pass_min_ball_travel_px: float = 60.0,
     reception_decel_fraction: float = 0.65,            # enabled: 1.0 → 0.65
@@ -122,6 +122,9 @@ def detect_events(
     # reappearing fast ball can still be attributed to the same owner.
     poss_linger: int       = 0
     _poss_linger_max       = max(15, int(0.6 * video.fps))  # ~15 frames at 25fps — covers tracker gaps
+    # When IN_FLIGHT starts via the linger path the first N frames of flight_ball_y
+    # are missing — arc data is unreliable, so we skip long_ball classification.
+    _linger_launch: bool   = False
 
     scene_changes = scene_changes or set()
     events: list[Event] = []
@@ -141,6 +144,7 @@ def detect_events(
             launch_ball_cx    = launch_ball_cy = None
             airborne_streak   = 0
             poss_linger       = 0
+            _linger_launch    = False
             vel_history.clear()
             continue
 
@@ -404,7 +408,10 @@ def detect_events(
                         # All gates passed — confirmed reception
                         flight_s = flight_elapsed / video.fps
                         is_high  = _is_high_arc(flight_ball_y, video.height * clearance_min_arc_frac)
-                        if flight_s >= clearance_min_flight_seconds and is_high:
+                        # Skip long_ball when flight started via linger: the first
+                        # several frames of flight_ball_y are missing (ball was lost
+                        # during the linger gap), so the arc measurement is unreliable.
+                        if flight_s >= clearance_min_flight_seconds and is_high and not _linger_launch:
                             etype = "long_ball"
                         else:
                             etype = "pass" if closest.team_id == owner_team else "interception"
@@ -431,6 +438,7 @@ def detect_events(
                         flight_frame      = None
                         flight_ball_y     = []
                         launch_ball_cx    = launch_ball_cy = None
+                        _linger_launch    = False
                         continue
                 else:
                     candidate_tid   = None
@@ -438,8 +446,11 @@ def detect_events(
 
             # Shot / clearance timeout.
             if flight_frame is not None and frame_index - flight_frame >= shot_no_catch_f:
-                _ball_truly_stopped = (ball is None) or (speed < 30.0 / video.fps)
-                _hard_cap = frame_index - flight_frame >= int(video.fps * 8.0)
+                # Fire timeout when ball is rolling slowly (< 25% of pass speed) OR
+                # hard-cap at 5s to prevent the machine being stuck in IN_FLIGHT for
+                # an entire passing sequence while the ball keeps rolling.
+                _ball_truly_stopped = (ball is None) or (speed < pass_speed * 0.25)
+                _hard_cap = frame_index - flight_frame >= int(video.fps * 5.0)
                 if _ball_truly_stopped or _hard_cap:
                     flight_s  = (frame_index - flight_frame) / video.fps
                     is_high   = _is_high_arc(flight_ball_y, video.height * clearance_min_arc_frac)
@@ -483,6 +494,7 @@ def detect_events(
                     # Pre-load streak so ground-mode possession fires immediately after
                     # the timeout: the ball is landing, not still in flight.
                     airborne_streak   = _max_airborne_idle + 1
+                    _linger_launch    = False
 
             continue
 
@@ -501,6 +513,7 @@ def detect_events(
                 if phase == _Phase.POSSESSED and speed >= pass_speed:
                     launch_ball_cx = (ball.bbox.x1 + ball.bbox.x2) / 2
                     launch_ball_cy = (ball.bbox.y1 + ball.bbox.y2) / 2
+                    _linger_launch = False
                     phase        = _Phase.IN_FLIGHT
                     flight_frame = frame_index
                     flight_speed = speed
@@ -514,6 +527,7 @@ def detect_events(
                 if phase == _Phase.POSSESSED and d_px > possession_distance_threshold_px:
                     launch_ball_cx = (ball.bbox.x1 + ball.bbox.x2) / 2
                     launch_ball_cy = (ball.bbox.y1 + ball.bbox.y2) / 2
+                    _linger_launch = False
                     phase        = _Phase.IN_FLIGHT
                     flight_frame = frame_index
                     flight_speed = speed
@@ -548,10 +562,13 @@ def detect_events(
                     launch_ball_cy = (ball.bbox.y1 + ball.bbox.y2) / 2
                 else:
                     launch_ball_cx = launch_ball_cy = None
-                poss_linger  = 0
-                phase        = _Phase.IN_FLIGHT
-                flight_frame = frame_index
-                flight_speed = speed
+                # If we were in the linger zone when speed appeared, the first
+                # several frames of flight are missing — mark arc data as unreliable.
+                _linger_launch = poss_linger > 0
+                poss_linger    = 0
+                phase          = _Phase.IN_FLIGHT
+                flight_frame   = frame_index
+                flight_speed   = speed
                 flight_ball_y   = []
                 candidate_tid   = None
                 candidate_count = 0
@@ -587,7 +604,13 @@ def detect_events(
             _close_contact_thresh = 80.0 if use_pitch else 40.0
         _close_contact = d <= _close_contact_thresh
         if _close_contact:
-            candidate_count = poss_min_frames  # jump straight to confirmation
+            # Fast-track to confirmation, but only when the ball is moving slowly
+            # enough to be genuinely controlled (aerial contacts always fast-track;
+            # ground contacts skip fast-track when ball is still fast — this filters
+            # out 1-frame ball→shoe tracker glitches where the ball snaps to a
+            # player's foot while still moving at pass speed).
+            if ball_airborne or speed < pass_speed * 3:
+                candidate_count = poss_min_frames
 
         if candidate_count < poss_min_frames:
             continue

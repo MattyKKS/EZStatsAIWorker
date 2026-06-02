@@ -52,8 +52,8 @@ class PipelineConfig(BaseModel):
         description="Ball ownership radius in cm (used when pitch coords available; ~2 m — FM standard)")
     possession_distance_threshold_px: float = Field(default=80.0, gt=0,
         description="Pixel-space fallback (normalised by player height) — 80 normalised px ≈ 2 m")
-    possession_min_seconds: float = Field(default=0.25, gt=0,
-        description="Seconds ball must stay near player feet to confirm ownership (raised 0.15→0.25)")
+    possession_min_seconds: float = Field(default=0.16, gt=0,
+        description="Seconds ball must stay near player feet to confirm ownership (lowered 0.25→0.16 = 4 frames)")
     # ── Pass ────────────────────────────────────────────────────────────────
     pass_min_speed_cms: float = Field(default=250.0, gt=0,
         description="Minimum ball speed in cm/s to enter IN_FLIGHT")
@@ -63,8 +63,8 @@ class PipelineConfig(BaseModel):
         description="Direction change for direct-possession path (only used when enable_direct_possession_path=True)")
     enable_direct_possession_path: bool = Field(default=False,
         description="Enable POSSESSED→POSSESSED direct pass detection. Disabled by default — fires on dribbles, ricochets, and airborne projections in broadcast footage.")
-    pass_min_flight_frames: int = Field(default=6, ge=1,
-        description="Min frames ball must be in flight before reception accepted (raised 3→6)")
+    pass_min_flight_frames: int = Field(default=4, ge=1,
+        description="Min frames ball must be in flight before reception accepted (lowered 6→4; catches ≥0.16s passes)")
     owner_min_possession_frames: int = Field(default=5, ge=1,
         description="Min frames owner held ball BEFORE kicking (0.2s at 25fps; first-touch receivers need only 2 frames)")
     pass_min_ball_travel_px: float = Field(default=60.0, gt=0,

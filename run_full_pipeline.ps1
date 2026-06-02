@@ -35,7 +35,7 @@ $output = Invoke-Step "analyze" {
       --tracker-config $trackerConfig `
       --render-video --frame-step 1 `
       --ball-detection-imgsz 1280 --detection-confidence 0.20 --detection-iou 0.45 `
-      --min-player-confidence 0.18 --min-ball-confidence 0.10 `
+      --min-player-confidence 0.18 --min-ball-confidence 0.15 `
       --min-track-length 2 --max-players-per-frame 28 `
       --max-unique-players 60 --min-player-track-frames 5 `
       --max-track-gap-frames 20 --max-track-merge-distance-px 85 `
