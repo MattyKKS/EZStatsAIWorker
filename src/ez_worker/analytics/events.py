@@ -117,6 +117,12 @@ def detect_events(
     _max_airborne_idle   = max(3, int(2.0 * video.fps))   # 2s — misdetection / stands cap
     _max_airborne_flight = max(3, int(6.0 * video.fps))   # 6s — genuine clearance flight
 
+    # Possession linger: when POSSESSED and ball drifts far at low speed (tracker
+    # gap / bouncing ball), hold possession for up to _poss_linger_max frames so a
+    # reappearing fast ball can still be attributed to the same owner.
+    poss_linger: int       = 0
+    _poss_linger_max       = max(15, int(0.6 * video.fps))  # ~15 frames at 25fps — covers tracker gaps
+
     scene_changes = scene_changes or set()
     events: list[Event] = []
 
@@ -134,6 +140,7 @@ def detect_events(
             flight_frame      = None
             launch_ball_cx    = launch_ball_cy = None
             airborne_streak   = 0
+            poss_linger       = 0
             vel_history.clear()
             continue
 
@@ -204,7 +211,28 @@ def detect_events(
                 _predicted_landing is not None
                 and abs(frame_index - _predicted_landing) <= _landing_window
             )
-            _eff_poss_min = max(1, poss_min_frames // 2) if _near_landing else poss_min_frames
+            # After shot_no_catch_f frames in flight the ball must be descending —
+            # treat the same as near-landing: halve the confirmation window and
+            # relax the deceleration gate so slow approaches still fire.
+            _long_flight    = (
+                flight_frame is not None
+                and frame_index - flight_frame >= shot_no_catch_f
+            )
+            # Relax thresholds when:
+            #   (a) ball is grounded (not ball_airborne), OR
+            #   (b) ball is airborne but at play height with nearby players
+            #       (_truly_airborne=False AND _ball_hr > 0.0 means a player is
+            #        close enough to measure height — not an isolated mid-arc ball).
+            # Case (b) catches goalkeepers receiving a ball that is still officially
+            # "airborne" as it descends into their feet.
+            # Case (a) prevents pixel-projection false receptions when the ball is
+            # high in a clearance arc with no nearby players (_ball_hr would be 0.0).
+            _grounded_or_playheight = (
+                not ball_airborne
+                or (not _truly_airborne and _ball_hr > 0.0)
+            )
+            _landing_relaxed = (_near_landing or _long_flight) and _grounded_or_playheight
+            _eff_poss_min = max(1, poss_min_frames // 2) if _landing_relaxed else poss_min_frames
 
             if ball is not None and players:
                 # When ball is airborne in pitch mode, homography projects to a
@@ -221,10 +249,9 @@ def detect_events(
                         use_pitch, player_pitch_pos, ball_pitch_pos
                     )
                     _eff_poss_dist = poss_dist
-                # Near the predicted landing, double the distance threshold — the
-                # ball may still be a meter or two away as it decelerates into the
-                # player's feet.
-                if _near_landing:
+                # Near landing or long-running flight (AND ball at play height):
+                # double the distance threshold — ball may still be 1-2 m away.
+                if _landing_relaxed:
                     _eff_poss_dist *= 2
                 if d <= _eff_poss_dist:
                     # Close-contact in flight: ball physically at player — confirm
@@ -237,11 +264,36 @@ def detect_events(
                     _flight_close = d <= _fc_thresh and not ball_airborne
 
                     if _flight_close:
-                        candidate_tid   = closest.track_id
-                        candidate_count = _eff_poss_min
+                        # Speed guard: ball moving much faster than launch = deflection
+                        # not reception (e.g. ball flying through at 3× launch speed).
+                        # Also add guard on speed guard for flight close.
+                        if speed <= flight_speed * 1.5:
+                            candidate_tid   = closest.track_id
+                            candidate_count = _eff_poss_min
+                        else:
+                            # Ball too fast: treat as non-decelerating (resets candidate)
+                            candidate_tid   = None
+                            candidate_count = 0
                     else:
                         decel_thresh = flight_speed * reception_decel_fraction
-                        ball_decelerating = (speed <= decel_thresh) or (flight_speed < pass_speed * 2)
+                        # When flight is long or near predicted landing AND ball is
+                        # at play height (not truly airborne), accept slow approaches
+                        # as decelerating — covers goalkeeper distributions where the
+                        # ball barely drops below the standard decel threshold.
+                        # Cap at 1500 cm/s (15 m/s): a ball still moving faster than
+                        # that cannot be received — it's either still in flight or a
+                        # tracking artifact near a player mid-arc.
+                        _max_land_speed = min(flight_speed * 1.2, 1500.0)
+                        _landing_catch = (
+                            _landing_relaxed
+                            and d <= 100.0
+                            and speed <= _max_land_speed
+                        )
+                        ball_decelerating = (
+                            (speed <= decel_thresh)
+                            or (flight_speed < pass_speed * 2)
+                            or _landing_catch
+                        )
 
                         if ball_decelerating and (not ball_airborne or not _truly_airborne):
                             # Count reception frames when ball is grounded OR at play
@@ -302,10 +354,12 @@ def detect_events(
                             continue
 
                         # Gate 3: owner must have held ball long enough BEFORE kicking.
-                        # First-touch receivers (owner_from_flight=True) only need 2 frames —
-                        # they received via a pass and may immediately redirect/volley.
+                        # First-touch or short-possession kicks use a 2-frame minimum:
+                        # (a) owner_from_flight=True: received via pass and immediately redirects
+                        # (b) owned_at_launch ≤ 4 frames: goalkeeper or quick first touch
                         owned_at_launch = (flight_frame or frame_index) - (owner_since_frame or flight_frame or frame_index)
-                        _min_own = max(2, int(video.fps * 0.08)) if owner_from_flight else owner_min_possession_frames
+                        _quick_kick = owner_from_flight or (owned_at_launch <= 4)
+                        _min_own = max(2, int(video.fps * 0.08)) if _quick_kick else owner_min_possession_frames
                         if owned_at_launch < _min_own:
                             phase             = _Phase.POSSESSED
                             prev_owner_tid    = owner_tid
@@ -392,11 +446,15 @@ def detect_events(
                     speed_key = "launch_speed_cms" if use_pitch else "launch_speed_pxs"
 
                     owned_at_launch = flight_frame - (owner_since_frame or flight_frame)
-                    min_for_shot = max(2, int(video.fps * 0.08)) if owner_from_flight else owner_min_possession_frames
-                    fire_event = owned_at_launch >= min_for_shot
+                    _quick_kick_t   = owner_from_flight or (owned_at_launch <= 4)
+                    min_for_shot    = max(2, int(video.fps * 0.08)) if _quick_kick_t else owner_min_possession_frames
+                    fire_event      = owned_at_launch >= min_for_shot
 
                     if fire_event:
-                        if flight_s >= clearance_min_flight_seconds and is_high:
+                        # Clearance requires a fast launch — a slow drifting ball
+                        # with a long flight time is not a clearance.
+                        _min_clearance_speed = pass_speed * 4  # ~1000 cm/s at 250 base
+                        if flight_s >= clearance_min_flight_seconds and is_high and flight_speed >= _min_clearance_speed:
                             events.append(Event(
                                 frame_index=flight_frame,
                                 time_seconds=round(flight_frame / video.fps, 2),
@@ -490,6 +548,7 @@ def detect_events(
                     launch_ball_cy = (ball.bbox.y1 + ball.bbox.y2) / 2
                 else:
                     launch_ball_cx = launch_ball_cy = None
+                poss_linger  = 0
                 phase        = _Phase.IN_FLIGHT
                 flight_frame = frame_index
                 flight_speed = speed
@@ -497,12 +556,20 @@ def detect_events(
                 candidate_tid   = None
                 candidate_count = 0
             elif phase == _Phase.POSSESSED:
-                phase             = _Phase.IDLE
-                owner_tid         = owner_team = None
-                owner_since_frame = None
+                # Possession linger: tracker sometimes loses the ball for a handful
+                # of frames right at the moment of a kick (speed=0 while ball is
+                # already in flight).  Hold possession for _poss_linger_max frames;
+                # if the ball reappears at pass speed → IN_FLIGHT from same owner.
+                poss_linger += 1
+                if poss_linger >= _poss_linger_max:
+                    phase             = _Phase.IDLE
+                    owner_tid         = owner_team = None
+                    owner_since_frame = None
+                    poss_linger       = 0
             continue
 
-        # Ball within possession zone
+        # Ball within possession zone — reset any linger counter
+        poss_linger = 0
         if candidate_tid == closest.track_id:
             candidate_count += 1
         else:
@@ -632,6 +699,7 @@ def detect_events(
             owner_team        = closest.team_id
             owner_since_frame = frame_index - (candidate_count - 1)
             owner_from_flight = False
+            poss_linger       = 0
 
     return _dedupe_dense_events(events)
 
