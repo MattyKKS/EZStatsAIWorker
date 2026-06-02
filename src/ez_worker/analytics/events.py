@@ -476,11 +476,22 @@ def detect_events(
                                 actor_track_id=owner_tid,
                                 details={speed_key: round(flight_speed, 1), "flight_seconds": round(flight_s, 2)},
                             ))
-                        elif flight_speed >= shot_speed:
+                        elif flight_speed >= shot_speed and not _quick_kick_t:
+                            # Quick redirects (owner_from_flight or ≤4 frames hold) are
+                            # mid-field deflections, not deliberate shots — suppress shot_attempt.
                             events.append(Event(
                                 frame_index=flight_frame,
                                 time_seconds=round(flight_frame / video.fps, 2),
                                 event_type="shot_attempt",
+                                actor_track_id=owner_tid,
+                                details={speed_key: round(flight_speed, 1)},
+                            ))
+                        elif _quick_kick_t and flight_speed >= pass_speed:
+                            # Quick first-touch redirect — emit as touch rather than shot_attempt.
+                            events.append(Event(
+                                frame_index=flight_frame,
+                                time_seconds=round(flight_frame / video.fps, 2),
+                                event_type="touch",
                                 actor_track_id=owner_tid,
                                 details={speed_key: round(flight_speed, 1)},
                             ))
