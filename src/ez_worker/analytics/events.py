@@ -358,12 +358,14 @@ def detect_events(
                             continue
 
                         # Gate 3: owner must have held ball long enough BEFORE kicking.
-                        # First-touch or short-possession kicks use a 2-frame minimum:
+                        # First-touch or short-possession kicks use a 1-frame minimum:
                         # (a) owner_from_flight=True: received via pass and immediately redirects
                         # (b) owned_at_launch ≤ 4 frames: goalkeeper or quick first touch
+                        # 1 frame (not 2) because the zone-exit fix can set owned_at_launch=1
+                        # when a first-touch player kicks on the very next frame.
                         owned_at_launch = (flight_frame or frame_index) - (owner_since_frame or flight_frame or frame_index)
                         _quick_kick = owner_from_flight or (owned_at_launch <= 4)
-                        _min_own = max(2, int(video.fps * 0.08)) if _quick_kick else owner_min_possession_frames
+                        _min_own = max(1, int(video.fps * 0.04)) if _quick_kick else owner_min_possession_frames
                         if owned_at_launch < _min_own:
                             phase             = _Phase.POSSESSED
                             prev_owner_tid    = owner_tid
@@ -412,7 +414,8 @@ def detect_events(
                         # several frames of flight_ball_y are missing (ball was lost
                         # during the linger gap), so the arc measurement is unreliable.
                         if flight_s >= clearance_min_flight_seconds and is_high and not _linger_launch:
-                            etype = "long_ball"
+                            # Same team → intentional long ball; different team → clearance
+                            etype = "long_ball" if closest.team_id == owner_team else "clearance"
                         else:
                             etype = "pass" if closest.team_id == owner_team else "interception"
                         speed_key = "launch_speed_cms" if use_pitch else "launch_speed_pxs"
@@ -458,7 +461,7 @@ def detect_events(
 
                     owned_at_launch = flight_frame - (owner_since_frame or flight_frame)
                     _quick_kick_t   = owner_from_flight or (owned_at_launch <= 4)
-                    min_for_shot    = max(2, int(video.fps * 0.08)) if _quick_kick_t else owner_min_possession_frames
+                    min_for_shot    = max(1, int(video.fps * 0.04)) if _quick_kick_t else owner_min_possession_frames
                     fire_event      = owned_at_launch >= min_for_shot
 
                     if fire_event:
@@ -555,7 +558,24 @@ def detect_events(
             )
             _idle_poss_dist = poss_dist
 
-        if d > _idle_poss_dist:
+        # When POSSESSED, the zone-exit decision must use the OWNER's distance to
+        # the ball, not the closest-player distance.  Without this, a ball flying
+        # THROUGH another player's zone (e.g. player 12 at 84 cm while owner 537
+        # is 264 cm away) would keep d low, block the IN_FLIGHT trigger, and let
+        # that bystander silently steal possession via candidate accumulation.
+        _d_for_exit = d
+        if phase == _Phase.POSSESSED and owner_tid is not None:
+            _owner_obs = next((p for p in players if p.track_id == owner_tid), None)
+            if _owner_obs is not None:
+                _aerial_mode = ball_airborne and not _truly_airborne
+                _, _d_for_exit = _closest_player(
+                    ball, [_owner_obs], frame_index, video,
+                    False if _aerial_mode else use_pitch,
+                    None if _aerial_mode else player_pitch_pos,
+                    None if _aerial_mode else ball_pitch_pos,
+                )
+
+        if _d_for_exit > _idle_poss_dist:
             if phase == _Phase.POSSESSED and speed >= pass_speed:
                 if ball is not None:
                     launch_ball_cx = (ball.bbox.x1 + ball.bbox.x2) / 2
@@ -587,6 +607,16 @@ def detect_events(
 
         # Ball within possession zone — reset any linger counter
         poss_linger = 0
+
+        # Speed guard (aerial only): if the ball is airborne at play-height AND
+        # still moving faster than 2× pass speed, it is flying through the zone —
+        # not being controlled.  Skip candidate accumulation so a player who is
+        # merely in the ball's path does not get credited with possession.
+        # (Genuine aerial contacts — headers, chest controls — absorb energy and
+        # bring the ball below this threshold within 1–2 frames of contact.)
+        if ball_airborne and not _truly_airborne and speed >= pass_speed * 2:
+            continue
+
         if candidate_tid == closest.track_id:
             candidate_count += 1
         else:
