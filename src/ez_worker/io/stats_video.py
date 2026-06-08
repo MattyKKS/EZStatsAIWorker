@@ -211,6 +211,7 @@ def render_stats_video(
     ball_model_path: Optional[Path] = None,
     player_model_path: Optional[Path] = None,
     show_keypoints: bool = False,
+    disable_ball_detector: bool = False,
 ) -> Path:
     import torch
     from ultralytics import YOLO
@@ -331,16 +332,19 @@ def render_stats_video(
 
     # Ball detector (optional)
     ball_detector = None
-    _candidate_ball = [ball_model_path] if ball_model_path else []
-    _candidate_ball += [Path("artifacts/ball/football-ball-detection.pt")]
-    for p in _candidate_ball:
-        if p is not None and Path(p).exists():
-            try:
-                ball_detector = _BallDetector(Path(p))
-                print(f"  Ball detector: {p}")
-            except Exception as e:
-                print(f"  Ball detector init failed: {e}")
-            break
+    if disable_ball_detector:
+        print("  Ball detector DISABLED — drawing ball from saved tracks.json positions")
+    else:
+        _candidate_ball = [ball_model_path] if ball_model_path else []
+        _candidate_ball += [Path("artifacts/ball/football-ball-detection.pt")]
+        for p in _candidate_ball:
+            if p is not None and Path(p).exists():
+                try:
+                    ball_detector = _BallDetector(Path(p))
+                    print(f"  Ball detector: {p}")
+                except Exception as e:
+                    print(f"  Ball detector init failed: {e}")
+                break
 
     saved_ball_annotator = _SavedBallAnnotator(radius=6, buffer_size=10)
 
@@ -775,6 +779,7 @@ def render_spatial_video(
     run_dir: Path,
     pitch_model_path: Optional[Path] = None,
     ball_model_path: Optional[Path] = None,
+    disable_ball_detector: bool = False,
 ) -> Path:
     """Top-down spatial analysis video: Voronoi + player dots + ball trajectory.
 
@@ -836,16 +841,19 @@ def render_spatial_video(
 
     # Ball model (optional — falls back to saved tracks.json positions)
     ball_detector = None
-    for p in ([ball_model_path] if ball_model_path else []) + [
-        Path("artifacts/ball/football-ball-detection.pt"),
-    ]:
-        if p is not None and Path(p).exists():
-            try:
-                ball_detector = _BallDetector(Path(p))
-                print(f"  Spatial ball detector: {p}")
-            except Exception as exc:
-                print(f"  Ball detector init failed: {exc}")
-            break
+    if disable_ball_detector:
+        print("  Spatial ball detector DISABLED — using saved tracks.json positions")
+    else:
+        for p in ([ball_model_path] if ball_model_path else []) + [
+            Path("artifacts/ball/football-ball-detection.pt"),
+        ]:
+            if p is not None and Path(p).exists():
+                try:
+                    ball_detector = _BallDetector(Path(p))
+                    print(f"  Spatial ball detector: {p}")
+                except Exception as exc:
+                    print(f"  Ball detector init failed: {exc}")
+                break
 
     # Output dimensions = pitch diagram size (fixed by draw_pitch defaults)
     sample_pitch = draw_pitch(config=config)

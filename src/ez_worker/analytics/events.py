@@ -240,8 +240,9 @@ def detect_events(
 
             if ball is not None and players:
                 # When ball is airborne in pitch mode, homography projects to a
-                # wrong ground position — fall back to pixel distance so that the
-                # receiver is still detected when the ball descends near them.
+                # wrong ground position — fall back to pixel distance.
+                # For play-height aerial (header/volley), use horizontal-only pixel
+                # distance since the vertical gap to player feet is expected and large.
                 if ball_airborne and use_pitch:
                     closest, d = _closest_player(
                         ball, players, frame_index, video, False, None, None
@@ -258,24 +259,14 @@ def detect_events(
                 if _landing_relaxed:
                     _eff_poss_dist *= 2
                 if d <= _eff_poss_dist:
-                    # Close-contact in flight: ball physically at player — confirm
-                    # immediately regardless of deceleration (volley / first touch /
-                    # redirect will not show deceleration in the velocity signal).
-                    # Only fires when ball is NOT airborne: pixel-space projection during
-                    # clearance arcs can look close to a player without the ball being
-                    # physically near them.  Tight threshold (30 cm pitch / 20 px pixel).
                     _fc_thresh   = 30.0 if use_pitch else 20.0
                     _flight_close = d <= _fc_thresh and not ball_airborne
 
                     if _flight_close:
-                        # Speed guard: ball moving much faster than launch = deflection
-                        # not reception (e.g. ball flying through at 3× launch speed).
-                        # Also add guard on speed guard for flight close.
                         if speed <= flight_speed * 1.5:
                             candidate_tid   = closest.track_id
                             candidate_count = _eff_poss_min
                         else:
-                            # Ball too fast: treat as non-decelerating (resets candidate)
                             candidate_tid   = None
                             candidate_count = 0
                     else:
@@ -556,10 +547,10 @@ def detect_events(
             # homography ground-plane projection is unreliable for elevated balls.
 
         if ball_airborne and not _truly_airborne:
-            # Play-height aerial contact path: use pixel-space distance normalised
-            # by the nearest player's height.  0.50 × player_height_px covers the
-            # full reach envelope (foot → outstretched arm above head).
-            closest, d = _closest_player(ball, players, frame_index, video, False, None, None)
+            # Play-height aerial contact path: horizontal-only pixel distance so the
+            # vertical gap (ball at head height, feet at ground) does not swamp the
+            # metric.  Height normalization is kept for perspective correction.
+            closest, d = _closest_player(ball, players, frame_index, video, False, None, None, aerial=True)
             _near_ph        = (closest.bbox.y2 - closest.bbox.y1) * video.height
             _idle_poss_dist = max(40.0, _near_ph * 0.50)
         else:
@@ -584,6 +575,7 @@ def detect_events(
                     False if _aerial_mode else use_pitch,
                     None if _aerial_mode else player_pitch_pos,
                     None if _aerial_mode else ball_pitch_pos,
+                    aerial=_aerial_mode,
                 )
 
         if _d_for_exit > _idle_poss_dist:
@@ -619,13 +611,11 @@ def detect_events(
         # Ball within possession zone — reset any linger counter
         poss_linger = 0
 
-        # Speed guard (aerial only): if the ball is airborne at play-height AND
-        # still moving faster than 2× pass speed, it is flying through the zone —
-        # not being controlled.  Skip candidate accumulation so a player who is
-        # merely in the ball's path does not get credited with possession.
-        # (Genuine aerial contacts — headers, chest controls — absorb energy and
-        # bring the ball below this threshold within 1–2 frames of contact.)
-        if ball_airborne and not _truly_airborne and speed >= pass_speed * 2:
+        # Speed guard (aerial only): block candidate accumulation only for true
+        # shots/clearances (>= shot_speed).  Headers and volleys typically arrive
+        # at 500–1100 cm/s and must be allowed through.  The old threshold
+        # (pass_speed * 2 = 500 cm/s) incorrectly blocked all aerial contacts.
+        if ball_airborne and not _truly_airborne and speed >= shot_speed:
             continue
 
         if candidate_tid == closest.track_id:
@@ -787,9 +777,16 @@ def _closest_player(
     use_pitch: bool,
     player_pitch_pos: dict | None,
     ball_pitch_pos: dict | None,
+    aerial: bool = False,
 ) -> tuple[TrackObservation, float]:
-    """Return (closest_player, distance) in cm (pitch) or normalised px (pixel fallback)."""
-    if use_pitch and player_pitch_pos is not None and ball_pitch_pos is not None:
+    """Return (closest_player, distance) in cm (pitch) or normalised px (pixel fallback).
+
+    aerial=True uses horizontal-only pixel distance, ignoring the vertical gap between
+    ball bottom and player feet.  Correct for headers/volleys where the vertical gap
+    is expected (ball at head height ≠ ball far away).  Height normalization is kept
+    so perspective (far players appear smaller) is still corrected.
+    """
+    if use_pitch and not aerial and player_pitch_pos is not None and ball_pitch_pos is not None:
         bpos = ball_pitch_pos.get(frame_index)
         fpos = player_pitch_pos.get(frame_index, {})
         if bpos is not None:
@@ -800,15 +797,15 @@ def _closest_player(
             return closest, dist_cm(closest)
 
     def dist_px(p: TrackObservation) -> float:
-        # Use player FEET (y2) and ball BOTTOM (y2) — not bbox centres.
-        # This removes ~half-player-height of error and correctly measures
-        # ground-level distance; airborne balls naturally have larger values.
         ball_x = (ball.bbox.x1 + ball.bbox.x2) / 2 * video.width
         ball_y = ball.bbox.y2 * video.height
         p_x    = (p.bbox.x1 + p.bbox.x2) / 2 * video.width
         p_y    = p.bbox.y2 * video.height
-        raw    = math.hypot(p_x - ball_x, p_y - ball_y)
-        p_h    = (p.bbox.y2 - p.bbox.y1) * video.height
+        # Aerial contacts: ball is at head/chest height so ball_y is above player
+        # feet by ~player_height.  Only horizontal proximity matters for a header
+        # or volley.  Ground contacts: full 2D distance (feet-to-ball-bottom).
+        raw = abs(p_x - ball_x) if aerial else math.hypot(p_x - ball_x, p_y - ball_y)
+        p_h = (p.bbox.y2 - p.bbox.y1) * video.height
         if p_h >= 15.0:
             return raw * (_STANDARD_PLAYER_HEIGHT_PX / p_h)
         return raw

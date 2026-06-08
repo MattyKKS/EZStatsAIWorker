@@ -285,6 +285,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Draw detected pitch keypoints (dots + edges) on the video for debugging.",
     )
+    stats_video.add_argument(
+        "--no-ball-detector",
+        action="store_true",
+        help="Skip the dedicated ball model; draw the ball from saved tracks.json positions instead.",
+    )
 
     spatial_video = subparsers.add_parser(
         "render-spatial-video",
@@ -302,6 +307,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="Path to ball detection YOLO model (auto-discovered if not set).",
+    )
+    spatial_video.add_argument(
+        "--no-ball-detector",
+        action="store_true",
+        help="Skip the dedicated ball model; use saved tracks.json positions instead.",
     )
 
     train = subparsers.add_parser("train-detector", help="Train the football detector.")
@@ -497,6 +507,7 @@ def main() -> None:
             ball_model_path=getattr(args, "ball_model_path", None),
             player_model_path=getattr(args, "player_model_path", None),
             show_keypoints=getattr(args, "show_keypoints", False),
+            disable_ball_detector=getattr(args, "no_ball_detector", False),
         )
         print(output_path)
         return
@@ -506,6 +517,7 @@ def main() -> None:
             args.run_dir,
             pitch_model_path=getattr(args, "pitch_model_path", None),
             ball_model_path=getattr(args, "ball_model_path", None),
+            disable_ball_detector=getattr(args, "no_ball_detector", False),
         )
         print(output_path)
         return
