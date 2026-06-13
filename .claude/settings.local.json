@@ -11,7 +11,12 @@
       "Bash(python rerun_events.py outputs/20260602_222046 --debug 26 30)",
       "Bash(python -c ' *)",
       "Bash(python -c \"import io; print\\(''.join\\(io.open\\('rerun_events.py',encoding='utf-8'\\).readlines\\(\\)[:50]\\)\\)\")",
-      "Bash(ez-worker render-stats-video *)"
+      "Bash(ez-worker render-stats-video *)",
+      "Bash(python -c \"import json,io; m=json.load\\(io.open\\('outputs/20260608_224414/video_meta.json',encoding='utf-8'\\)\\); print\\(m['width'],m['height']\\)\")",
+      "Bash(ls -la src/ez_worker/postprocess/siglip_merge.py)",
+      "Bash(grep -n \"merge-tracklets\\\\|merge_tracklets\\\\|siglip_merge\" src/ez_worker/cli.py)",
+      "Bash(xargs grep -ln \"tracklet\\\\|siglip_merge\\\\|merge_tracklet\\\\|cosine.*similar\")",
+      "Bash(python -m src.ez_worker.postprocess.report_cleanup outputs/20260608_224414 --apply)"
     ]
   }
 }
