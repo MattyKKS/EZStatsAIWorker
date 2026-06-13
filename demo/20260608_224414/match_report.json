@@ -1,0 +1,731 @@
+{
+  "match_id": "20260608_224414",
+  "video": "data\\raw\\08fd33_4.mp4",
+  "duration_s": 30.0,
+  "fps": 25.0,
+  "possession": {
+    "0": 50.0,
+    "1": 50.0
+  },
+  "players": [
+    {
+      "track_id": 1,
+      "label": "T2#1",
+      "team_id": 1,
+      "touches": 0,
+      "passes": 1,
+      "shots": 0,
+      "distance_px": 2088.8,
+      "crop_path": "player_crops/track_0001/frame_000000.jpg"
+    },
+    {
+      "track_id": 2,
+      "label": "T2#2",
+      "team_id": 1,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 2114.9,
+      "crop_path": "player_crops/track_0002/frame_000000.jpg"
+    },
+    {
+      "track_id": 3,
+      "label": "T1#3",
+      "team_id": 0,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 1447.5,
+      "crop_path": "player_crops/track_0003/frame_000000.jpg"
+    },
+    {
+      "track_id": 4,
+      "label": "T2#4",
+      "team_id": 1,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 1528.5,
+      "crop_path": "player_crops/track_0004/frame_000000.jpg"
+    },
+    {
+      "track_id": 5,
+      "label": "T2#5",
+      "team_id": 1,
+      "touches": 0,
+      "passes": 2,
+      "shots": 0,
+      "distance_px": 1265.6,
+      "crop_path": "player_crops/track_0005/frame_000000.jpg"
+    },
+    {
+      "track_id": 6,
+      "label": "T1#6",
+      "team_id": 0,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 1672.9,
+      "crop_path": "player_crops/track_0006/frame_000000.jpg"
+    },
+    {
+      "track_id": 7,
+      "label": "T1#7",
+      "team_id": 0,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 2028.3,
+      "crop_path": "player_crops/track_0007/frame_000000.jpg"
+    },
+    {
+      "track_id": 8,
+      "label": "T2#8",
+      "team_id": 1,
+      "touches": 0,
+      "passes": 1,
+      "shots": 0,
+      "distance_px": 2220.4,
+      "crop_path": "player_crops/track_0008/frame_000000.jpg"
+    },
+    {
+      "track_id": 9,
+      "label": "T2#9",
+      "team_id": 1,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 863.1,
+      "crop_path": "player_crops/track_0009/frame_000000.jpg"
+    },
+    {
+      "track_id": 11,
+      "label": "T1#11",
+      "team_id": 0,
+      "touches": 0,
+      "passes": 2,
+      "shots": 0,
+      "distance_px": 2015.1,
+      "crop_path": "player_crops/track_0011/frame_000000.jpg"
+    },
+    {
+      "track_id": 12,
+      "label": "T1#12",
+      "team_id": 0,
+      "touches": 1,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 1961.1,
+      "crop_path": "player_crops/track_0012/frame_000000.jpg"
+    },
+    {
+      "track_id": 13,
+      "label": "T1#13",
+      "team_id": 0,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 1643.0,
+      "crop_path": "player_crops/track_0013/frame_000000.jpg"
+    },
+    {
+      "track_id": 14,
+      "label": "T1#14",
+      "team_id": 0,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 1708.9,
+      "crop_path": "player_crops/track_0014/frame_000000.jpg"
+    },
+    {
+      "track_id": 15,
+      "label": "T1#15",
+      "team_id": 0,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 136.9,
+      "crop_path": "player_crops/track_0015/frame_000000.jpg"
+    },
+    {
+      "track_id": 16,
+      "label": "T1#16",
+      "team_id": 0,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 1788.8,
+      "crop_path": "player_crops/track_0016/frame_000000.jpg"
+    },
+    {
+      "track_id": 20,
+      "label": "T1#20",
+      "team_id": 0,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 1355.6,
+      "crop_path": "player_crops/track_0020/frame_000000.jpg"
+    },
+    {
+      "track_id": 21,
+      "label": "T2#21",
+      "team_id": 1,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 4.4,
+      "crop_path": "player_crops/track_0021/frame_000000.jpg"
+    },
+    {
+      "track_id": 22,
+      "label": "T2#22",
+      "team_id": 1,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 297.6,
+      "crop_path": "player_crops/track_0022/frame_000000.jpg"
+    },
+    {
+      "track_id": 23,
+      "label": "T1#23",
+      "team_id": 0,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 1944.7,
+      "crop_path": "player_crops/track_0023/frame_000000.jpg"
+    },
+    {
+      "track_id": 24,
+      "label": "T2#24",
+      "team_id": 1,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 2330.8,
+      "crop_path": "player_crops/track_0024/frame_000000.jpg"
+    },
+    {
+      "track_id": 25,
+      "label": "T1#25",
+      "team_id": 0,
+      "touches": 1,
+      "passes": 1,
+      "shots": 0,
+      "distance_px": 2581.6,
+      "crop_path": "player_crops/track_0025/frame_000000.jpg"
+    },
+    {
+      "track_id": 32,
+      "label": "T1#32",
+      "team_id": 0,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 1.9,
+      "crop_path": "player_crops/track_0032/frame_000007.jpg"
+    },
+    {
+      "track_id": 41,
+      "label": "T1#41",
+      "team_id": 0,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 1464.1,
+      "crop_path": "player_crops/track_0041/frame_000010.jpg"
+    },
+    {
+      "track_id": 127,
+      "label": "T1#127",
+      "team_id": 0,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 1408.8,
+      "crop_path": "player_crops/track_0127/frame_000074.jpg"
+    },
+    {
+      "track_id": 171,
+      "label": "T1#171",
+      "team_id": 0,
+      "touches": 1,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 392.7,
+      "crop_path": "player_crops/track_0171/frame_000119.jpg"
+    },
+    {
+      "track_id": 190,
+      "label": "T1#190",
+      "team_id": 0,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 1331.6,
+      "crop_path": "player_crops/track_0190/frame_000131.jpg"
+    },
+    {
+      "track_id": 210,
+      "label": "T2#210",
+      "team_id": 1,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 434.6,
+      "crop_path": "player_crops/track_0210/frame_000157.jpg"
+    },
+    {
+      "track_id": 232,
+      "label": "T1#232",
+      "team_id": 0,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 353.3,
+      "crop_path": "player_crops/track_0232/frame_000307.jpg"
+    },
+    {
+      "track_id": 281,
+      "label": "T2#281",
+      "team_id": 1,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 786.0,
+      "crop_path": "player_crops/track_0281/frame_000357.jpg"
+    },
+    {
+      "track_id": 339,
+      "label": "T2#339",
+      "team_id": 1,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 133.7,
+      "crop_path": "player_crops/track_0339/frame_000409.jpg"
+    },
+    {
+      "track_id": 367,
+      "label": "T1#367",
+      "team_id": 0,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 595.8,
+      "crop_path": "player_crops/track_0367/frame_000444.jpg"
+    },
+    {
+      "track_id": 437,
+      "label": "T2#437",
+      "team_id": 1,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 485.8,
+      "crop_path": "player_crops/track_0437/frame_000500.jpg"
+    },
+    {
+      "track_id": 442,
+      "label": "T2#442",
+      "team_id": 1,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 264.9,
+      "crop_path": "player_crops/track_0442/frame_000503.jpg"
+    },
+    {
+      "track_id": 472,
+      "label": "T2#472",
+      "team_id": 1,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 100.2,
+      "crop_path": "player_crops/track_0472/frame_000532.jpg"
+    },
+    {
+      "track_id": 497,
+      "label": "T2#497",
+      "team_id": 1,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 25.6,
+      "crop_path": "player_crops/track_0497/frame_000564.jpg"
+    },
+    {
+      "track_id": 510,
+      "label": "T2#510",
+      "team_id": 1,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 262.5,
+      "crop_path": "player_crops/track_0510/frame_000580.jpg"
+    },
+    {
+      "track_id": 512,
+      "label": "T1#512",
+      "team_id": 0,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 8.4,
+      "crop_path": "player_crops/track_0512/frame_000582.jpg"
+    },
+    {
+      "track_id": 559,
+      "label": "T1#559",
+      "team_id": 0,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 352.1,
+      "crop_path": "player_crops/track_0559/frame_000671.jpg"
+    },
+    {
+      "track_id": 591,
+      "label": "T2#591",
+      "team_id": 1,
+      "touches": 0,
+      "passes": 0,
+      "shots": 0,
+      "distance_px": 101.0,
+      "crop_path": "player_crops/track_0591/frame_000696.jpg"
+    }
+  ],
+  "events": [
+    {
+      "type": "touch",
+      "frame": 47,
+      "time_s": 1.88,
+      "actor": 25,
+      "actor_label": "T1#25",
+      "target": null,
+      "target_label": null,
+      "details": {
+        "distance_cm": 70.4
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 93,
+      "time_s": 3.72,
+      "actor": 25,
+      "actor_label": "T1#25",
+      "target": 6,
+      "target_label": "T1#6",
+      "details": {
+        "launch_speed_cms": 1545.6,
+        "flight_frames": 38
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 172,
+      "time_s": 6.88,
+      "actor": 6,
+      "actor_label": "T1#6",
+      "target": 171,
+      "target_label": "T1#171",
+      "details": {
+        "launch_speed_cms": 1639.6,
+        "flight_frames": 45
+      }
+    },
+    {
+      "type": "clearance",
+      "frame": 305,
+      "time_s": 12.2,
+      "actor": 171,
+      "actor_label": "T1#171",
+      "target": null,
+      "target_label": null,
+      "details": {
+        "launch_speed_cms": 2427.6,
+        "flight_seconds": 4.8
+      }
+    },
+    {
+      "type": "touch",
+      "frame": 530,
+      "time_s": 21.2,
+      "actor": 8,
+      "actor_label": "T2#8",
+      "target": null,
+      "target_label": null,
+      "details": {
+        "launch_speed_cms": 741.9
+      }
+    },
+    {
+      "type": "interception",
+      "frame": 659,
+      "time_s": 26.36,
+      "actor": 5,
+      "actor_label": "T2#5",
+      "target": 16,
+      "target_label": "T1#16",
+      "details": {
+        "launch_speed_cms": 912.9,
+        "flight_frames": 15
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 708,
+      "time_s": 28.32,
+      "actor": 16,
+      "actor_label": "T1#16",
+      "target": 12,
+      "target_label": "T1#12",
+      "details": {
+        "launch_speed_cms": 1087.7,
+        "flight_frames": 29
+      }
+    },
+    {
+      "type": "interception",
+      "frame": 731,
+      "time_s": 29.24,
+      "actor": 12,
+      "actor_label": "T1#12",
+      "target": 2,
+      "target_label": "T2#2",
+      "details": {
+        "launch_speed_cms": 785.3,
+        "flight_frames": 12
+      }
+    }
+  ],
+  "pass_network": {
+    "nodes": [
+      {
+        "id": 1,
+        "label": "T2#1",
+        "team_id": 1
+      },
+      {
+        "id": 2,
+        "label": "T2#2",
+        "team_id": 1
+      },
+      {
+        "id": 3,
+        "label": "T1#3",
+        "team_id": 0
+      },
+      {
+        "id": 4,
+        "label": "T2#4",
+        "team_id": 1
+      },
+      {
+        "id": 5,
+        "label": "T2#5",
+        "team_id": 1
+      },
+      {
+        "id": 6,
+        "label": "T1#6",
+        "team_id": 0
+      },
+      {
+        "id": 7,
+        "label": "T1#7",
+        "team_id": 0
+      },
+      {
+        "id": 8,
+        "label": "T2#8",
+        "team_id": 1
+      },
+      {
+        "id": 9,
+        "label": "T2#9",
+        "team_id": 1
+      },
+      {
+        "id": 11,
+        "label": "T1#11",
+        "team_id": 0
+      },
+      {
+        "id": 12,
+        "label": "T1#12",
+        "team_id": 0
+      },
+      {
+        "id": 13,
+        "label": "T1#13",
+        "team_id": 0
+      },
+      {
+        "id": 14,
+        "label": "T1#14",
+        "team_id": 0
+      },
+      {
+        "id": 15,
+        "label": "T1#15",
+        "team_id": 0
+      },
+      {
+        "id": 16,
+        "label": "T1#16",
+        "team_id": 0
+      },
+      {
+        "id": 20,
+        "label": "T1#20",
+        "team_id": 0
+      },
+      {
+        "id": 21,
+        "label": "T2#21",
+        "team_id": 1
+      },
+      {
+        "id": 22,
+        "label": "T2#22",
+        "team_id": 1
+      },
+      {
+        "id": 23,
+        "label": "T1#23",
+        "team_id": 0
+      },
+      {
+        "id": 24,
+        "label": "T2#24",
+        "team_id": 1
+      },
+      {
+        "id": 25,
+        "label": "T1#25",
+        "team_id": 0
+      },
+      {
+        "id": 32,
+        "label": "T1#32",
+        "team_id": 0
+      },
+      {
+        "id": 41,
+        "label": "T1#41",
+        "team_id": 0
+      },
+      {
+        "id": 127,
+        "label": "T1#127",
+        "team_id": 0
+      },
+      {
+        "id": 171,
+        "label": "T1#171",
+        "team_id": 0
+      },
+      {
+        "id": 190,
+        "label": "T1#190",
+        "team_id": 0
+      },
+      {
+        "id": 210,
+        "label": "T2#210",
+        "team_id": 1
+      },
+      {
+        "id": 232,
+        "label": "T1#232",
+        "team_id": 0
+      },
+      {
+        "id": 281,
+        "label": "T2#281",
+        "team_id": 1
+      },
+      {
+        "id": 339,
+        "label": "T2#339",
+        "team_id": 1
+      },
+      {
+        "id": 367,
+        "label": "T1#367",
+        "team_id": 0
+      },
+      {
+        "id": 437,
+        "label": "T2#437",
+        "team_id": 1
+      },
+      {
+        "id": 442,
+        "label": "T2#442",
+        "team_id": 1
+      },
+      {
+        "id": 472,
+        "label": "T2#472",
+        "team_id": 1
+      },
+      {
+        "id": 497,
+        "label": "T2#497",
+        "team_id": 1
+      },
+      {
+        "id": 510,
+        "label": "T2#510",
+        "team_id": 1
+      },
+      {
+        "id": 512,
+        "label": "T1#512",
+        "team_id": 0
+      },
+      {
+        "id": 559,
+        "label": "T1#559",
+        "team_id": 0
+      },
+      {
+        "id": 591,
+        "label": "T2#591",
+        "team_id": 1
+      }
+    ],
+    "edges": [
+      {
+        "from": 25,
+        "to": 6,
+        "count": 1
+      },
+      {
+        "from": 6,
+        "to": 171,
+        "count": 1
+      },
+      {
+        "from": 16,
+        "to": 12,
+        "count": 1
+      }
+    ]
+  },
+  "summary": {
+    "total_touches": 2,
+    "total_passes": 3,
+    "total_long_balls": 0,
+    "total_clearances": 1,
+    "total_interceptions": 2,
+    "total_shots": 0,
+    "total_goals": 0
+  }
+}

@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EZStats Debug Viewer</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --home: #FF1493; --away: #00BFFF;
+    --bg: #0d1117; --card: #161b22; --border: #30363d;
+    --text: #c9d1d9; --muted: #8b949e; --accent: #58a6ff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; font-size: 14px; }
+  h1 { font-size: 20px; font-weight: 600; }
+  h2 { font-size: 14px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 10px; }
+  .header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .header label { display: flex; align-items: center; gap: 8px; cursor: pointer; background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; color: var(--accent); }
+  #fileInput { display: none; }
+  .meta { color: var(--muted); font-size: 13px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; padding: 20px 24px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  /* Possession bar */
+  .poss-bar { height: 28px; border-radius: 4px; overflow: hidden; display: flex; margin: 8px 0; }
+  .poss-home { background: var(--home); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #fff; transition: width .5s; }
+  .poss-away { background: var(--away); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #fff; transition: width .5s; }
+  .poss-labels { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+  /* Summary pills */
+  .pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .pill { background: #21262d; border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px; font-size: 12px; }
+  .pill span { font-weight: 700; color: var(--accent); }
+  /* Table */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--muted); font-weight: 500; padding: 6px 8px; border-bottom: 1px solid var(--border); cursor: pointer; user-select: none; }
+  th:hover { color: var(--accent); }
+  td { padding: 6px 8px; border-bottom: 1px solid #21262d; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #21262d; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+  /* Events */
+  .events-list { max-height: 340px; overflow-y: auto; }
+  .event-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid #21262d; font-size: 13px; }
+  .event-row:last-child { border-bottom: none; }
+  .evt-time { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 48px; }
+  .evt-badge { border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+  .badge-pass        { background: #1f3d2a; color: #56d364; }
+  .badge-shot_attempt { background: #3d1f1f; color: #f85149; }
+  .badge-goal        { background: #3d3d1f; color: #e3b341; }
+  .badge-interception { background: #2a1f3d; color: #d2a8ff; }
+  .badge-touch       { background: #1f2a3d; color: #79c0ff; }
+  .badge-corner      { background: #1f3a3d; color: #76e3ea; }
+  .badge-free_kick   { background: #3d2a1f; color: #ffad6a; }
+  .badge-throw_in    { background: #2a3d1f; color: #9bce7e; }
+  .badge-header      { background: #3d1f33; color: #ff7eb3; }
+  .badge-cross       { background: #1f3d35; color: #6ee7b7; }
+  .badge-tackle      { background: #3d2d1f; color: #fbbf24; }
+  .badge-drive       { background: #1f2d3d; color: #93c5fd; }
+  .badge-clearance   { background: #2d2a1f; color: #fcd34d; }
+  .badge-long_ball   { background: #1f2d2a; color: #6ee7b7; }
+  .badge-default     { background: #21262d; color: var(--muted); }
+  /* Player crop thumbnail */
+  .crop-thumb { width: 32px; height: 46px; object-fit: cover; border-radius: 3px; border: 1px solid var(--border); cursor: zoom-in; }
+  .crop-thumb:hover { transform: scale(4); transform-origin: left center; z-index: 10; position: relative; }
+  .evt-actor { color: var(--muted); }
+  /* Pass network table */
+  .top-passers { display: flex; flex-direction: column; gap: 6px; }
+  .passer-row { display: flex; align-items: center; gap: 8px; }
+  .passer-bar-bg { flex: 1; background: #21262d; border-radius: 3px; height: 6px; overflow: hidden; }
+  .passer-bar { height: 6px; border-radius: 3px; background: var(--accent); }
+  .passer-label { min-width: 80px; font-size: 12px; color: var(--muted); }
+  .passer-count { min-width: 24px; text-align: right; font-size: 12px; font-weight: 600; }
+  /* Chart canvas */
+  .chart-wrap { position: relative; height: 200px; }
+  /* Placeholder */
+  .placeholder { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .placeholder h2 { font-size: 18px; color: var(--text); text-transform: none; letter-spacing: 0; margin-bottom: 8px; }
+  .sort-icon { font-size: 10px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>⚽ EZStats Debug Viewer</h1>
+  <label>
+    📂 Load match_report.json
+    <input type="file" id="fileInput" accept=".json">
+  </label>
+  <span class="meta" id="metaLine"></span>
+</div>
+
+<div id="content">
+  <div class="placeholder">
+    <h2>No report loaded</h2>
+    <p>Click "Load match_report.json" and select the file from your outputs folder.<br>
+       The file is at <code>outputs/&lt;timestamp&gt;/match_report.json</code></p>
+  </div>
+</div>
+
+<script>
+let sortState = {};
+
+document.getElementById('fileInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      render(data);
+    } catch (err) {
+      alert('Failed to parse JSON: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+});
+
+function fmtTime(s) {
+  const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+  return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+function badgeClass(type) {
+  const map = {
+    pass:'badge-pass', shot_attempt:'badge-shot_attempt', goal:'badge-goal',
+    interception:'badge-interception', touch:'badge-touch', corner:'badge-corner',
+    free_kick:'badge-free_kick', throw_in:'badge-throw_in', header:'badge-header',
+    cross:'badge-cross', tackle:'badge-tackle', drive:'badge-drive',
+    clearance:'badge-clearance', long_ball:'badge-long_ball',
+  };
+  return map[type] || 'badge-default';
+}
+
+function teamColor(teamId) {
+  if (teamId === 0) return 'var(--home)';
+  if (teamId === 1) return 'var(--away)';
+  return 'var(--muted)';
+}
+
+function render(d) {
+  document.getElementById('metaLine').textContent =
+    `${d.video}  •  ${d.duration_s}s  •  ${d.fps} fps  •  ID: ${d.match_id}`;
+
+  // Possession
+  const poss = d.possession || {};
+  const keys = Object.keys(poss).sort();
+  const pctHome = parseFloat(poss[keys[0]] || 50);
+  const pctAway = parseFloat(poss[keys[1]] || 50);
+
+  // Summary
+  const s = d.summary || {};
+  const summaryPills = [
+    ['Touches', s.total_touches || 0],
+    ['Passes', s.total_passes || 0],
+    ['Long Balls', s.total_long_balls || 0],
+    ['Clearances', s.total_clearances || 0],
+    ['Shots', s.total_shots || 0],
+    ['Goals', s.total_goals || 0],
+    ['Interceptions', s.total_interceptions || 0],
+  ].map(([k,v]) => `<div class="pill">${k}: <span>${v}</span></div>`).join('');
+
+  const events = (d.events || []);
+
+  // Pass network — top 10 passers by total passes sent
+  const passCounts = {};
+  (d.pass_network?.edges || []).forEach(e => {
+    passCounts[e.from] = (passCounts[e.from] || 0) + e.count;
+  });
+  const topPassers = Object.entries(passCounts)
+    .sort((a,b) => b[1]-a[1]).slice(0,10);
+  const maxPasses = topPassers[0]?.[1] || 1;
+
+  const playerById = {};
+  (d.players || []).forEach(p => playerById[p.track_id] = p);
+
+  // Build HTML
+  document.getElementById('content').innerHTML = `
+    <div class="grid">
+
+      <!-- Possession -->
+      <div class="card">
+        <h2>Possession</h2>
+        <div class="poss-bar">
+          <div class="poss-home" style="width:${pctHome}%">${pctHome}%</div>
+          <div class="poss-away" style="width:${pctAway}%">${pctAway}%</div>
+        </div>
+        <div class="poss-labels">
+          <span>🔴 Team 0 (Home)</span>
+          <span>Team 1 (Away) 🔵</span>
+        </div>
+      </div>
+
+      <!-- Summary -->
+      <div class="card">
+        <h2>Match Summary</h2>
+        <div class="pills">${summaryPills}</div>
+        <div class="pills" style="margin-top:8px">
+          <div class="pill">Players: <span>${(d.players||[]).length}</span></div>
+          <div class="pill">Duration: <span>${fmtTime(d.duration_s)}</span></div>
+          <div class="pill">Events: <span>${(d.events||[]).length}</span></div>
+        </div>
+      </div>
+
+      <!-- Player Stats Table (full width) -->
+      <div class="card" style="grid-column: 1 / -1;">
+        <h2>Player Stats</h2>
+        <table id="playerTable">
+          <thead>
+            <tr>
+              <th>Photo</th>
+              <th onclick="sortTable('playerTable',1)">Player <span class="sort-icon">⇅</span></th>
+              <th onclick="sortTable('playerTable',2)">Team <span class="sort-icon">⇅</span></th>
+              <th onclick="sortTable('playerTable',3)">Touches <span class="sort-icon">⇅</span></th>
+              <th onclick="sortTable('playerTable',4)">Passes <span class="sort-icon">⇅</span></th>
+              <th onclick="sortTable('playerTable',5)">Shots <span class="sort-icon">⇅</span></th>
+              <th onclick="sortTable('playerTable',6)">Dist (px) <span class="sort-icon">⇅</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(d.players||[]).sort((a,b)=>b.passes-a.passes).map(p => {
+              const imgSrc = p.crop_path ? (d.match_id + '/' + p.crop_path) : null;
+              const thumb = imgSrc
+                ? `<img class="crop-thumb" src="${imgSrc}" alt="#${p.track_id}" title="#${p.track_id}">`
+                : `<div style="width:32px;height:46px;background:#21262d;border-radius:3px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted)">?</div>`;
+              return `<tr>
+                <td>${thumb}</td>
+                <td>#${p.track_id}</td>
+                <td><span class="dot" style="background:${teamColor(p.team_id)}"></span>Team ${p.team_id ?? '?'}</td>
+                <td>${p.touches}</td>
+                <td><strong>${p.passes}</strong></td>
+                <td>${p.shots}</td>
+                <td>${p.distance_px.toLocaleString()}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Event Timeline -->
+      <div class="card" style="grid-column: 1 / -1;">
+        <h2>Event Timeline (${events.length} events)</h2>
+        <div class="events-list">
+          ${events.length === 0
+            ? '<div style="color:var(--muted);padding:20px 0;">No events detected yet. Run the pipeline first.</div>'
+            : events.map(e => {
+                const actor = e.actor != null ? `<span class="evt-actor">#${e.actor}${e.target != null ? ' → #'+e.target : ''}</span>` : '';
+                return `<div class="event-row">
+                  <span class="evt-time">${fmtTime(e.time_s)}</span>
+                  <span class="evt-badge ${badgeClass(e.type)}">${e.type.replace('_',' ')}</span>
+                  ${actor}
+                </div>`;
+              }).join('')
+          }
+        </div>
+      </div>
+
+      <!-- Top Passers -->
+      <div class="card">
+        <h2>Top Passers (by passes sent)</h2>
+        <div class="top-passers">
+          ${topPassers.length === 0
+            ? '<div style="color:var(--muted)">No pass events detected yet.</div>'
+            : topPassers.map(([pid, cnt]) => {
+                const p = playerById[parseInt(pid)];
+                const teamId = p?.team_id;
+                const col = teamColor(teamId);
+                return `<div class="passer-row">
+                  <span class="passer-label"><span class="dot" style="background:${col}"></span>#${pid}</span>
+                  <div class="passer-bar-bg"><div class="passer-bar" style="width:${Math.round(cnt/maxPasses*100)}%;background:${col}"></div></div>
+                  <span class="passer-count">${cnt}</span>
+                </div>`;
+              }).join('')
+          }
+        </div>
+      </div>
+
+      <!-- Pass Network Summary -->
+      <div class="card">
+        <h2>Pass Network (top connections)</h2>
+        <table>
+          <thead>
+            <tr><th>From</th><th>To</th><th>Count</th></tr>
+          </thead>
+          <tbody>
+            ${(d.pass_network?.edges || []).slice(0,15).map(e => `
+              <tr>
+                <td><span class="dot" style="background:${teamColor(playerById[e.from]?.team_id)}"></span>#${e.from}</td>
+                <td><span class="dot" style="background:${teamColor(playerById[e.to]?.team_id)}"></span>#${e.to}</td>
+                <td><strong>${e.count}</strong></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  `;
+}
+
+function sortTable(tableId, col) {
+  const table = document.getElementById(tableId);
+  const tbody = table.querySelector('tbody');
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  const key = `${tableId}_${col}`;
+  const asc = !(sortState[key]);
+  sortState[key] = asc;
+
+  rows.sort((a, b) => {
+    const av = a.cells[col].textContent.replace(/[#,]/g,'').trim();
+    const bv = b.cells[col].textContent.replace(/[#,]/g,'').trim();
+    const an = parseFloat(av), bn = parseFloat(bv);
+    if (!isNaN(an) && !isNaN(bn)) return asc ? an - bn : bn - an;
+    return asc ? av.localeCompare(bv) : bv.localeCompare(av);
+  });
+  rows.forEach(r => tbody.appendChild(r));
+}
+</script>
+</body>
+</html>
