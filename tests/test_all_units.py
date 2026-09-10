@@ -109,10 +109,10 @@ def make_artifacts(tracks=None, events=None, stats=None):
     )
 
 # ══════════════════════════════════════════════════════════════════════════════
-# UTC-07  Pydantic schemas
+# UTC-07  run_analysis() — pipeline data model schemas
 # ══════════════════════════════════════════════════════════════════════════════
 
-class UTC07_Schemas(unittest.TestCase):
+class UTC07_RunAnalysis(unittest.TestCase):
 
     def test_bbox_construction(self):
         b = BBox(x1=10, y1=20, x2=30, y2=40)
@@ -174,10 +174,10 @@ class UTC07_Schemas(unittest.TestCase):
         self.assertNotIn('cx', d); self.assertNotIn('cy', d)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# UTC-08  detect_events — state machine
+# UTC-13  detect_events — state machine
 # ══════════════════════════════════════════════════════════════════════════════
 
-class UTC08_DetectEvents(unittest.TestCase):
+class UTC13_DetectEvents(unittest.TestCase):
 
     def _run(self, tracks, video=None, ball_id=99):
         v = video or make_video(fps=25.0, frames=len(set(o.frame_index for o in tracks)) or 1)
@@ -267,10 +267,10 @@ class UTC08_DetectEvents(unittest.TestCase):
             self.assertIsInstance(ev.frame_index, int)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# UTC-09  build_track_stats
+# UTC-14  build_track_stats
 # ══════════════════════════════════════════════════════════════════════════════
 
-class UTC09_BuildTrackStats(unittest.TestCase):
+class UTC14_BuildTrackStats(unittest.TestCase):
 
     def test_empty_tracks_returns_empty_list(self):
         result = build_track_stats([], [], make_video())
@@ -348,10 +348,10 @@ class UTC09_BuildTrackStats(unittest.TestCase):
             self.assertIsInstance(s, TrackStats)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# UTC-10  fuse_events
+# UTC-16  fuse_events / event_spotter
 # ══════════════════════════════════════════════════════════════════════════════
 
-class UTC10_FuseEvents(unittest.TestCase):
+class UTC16_FuseAndSpotter(unittest.TestCase):
 
     def test_empty_inputs_returns_empty(self):
         result = fuse_events([], [], video_fps=25.0)
@@ -416,10 +416,10 @@ class UTC10_FuseEvents(unittest.TestCase):
         self.assertIn('shot_attempt', types)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# UTC-11  write_artifacts / _build_match_report
+# UTC-12  IO layer — write_artifacts / _build_match_report
 # ══════════════════════════════════════════════════════════════════════════════
 
-class UTC11_WriteArtifacts(unittest.TestCase):
+class UTC12_IOLayer(unittest.TestCase):
 
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
@@ -524,10 +524,10 @@ class UTC11_WriteArtifacts(unittest.TestCase):
         self.assertTrue((Path(self.tmpdir) / 'video_meta.json').exists())
 
 # ══════════════════════════════════════════════════════════════════════════════
-# UTC-12  load_video_meta (error paths)
+# UTC-12b IO layer — load_video_meta (error paths)
 # ══════════════════════════════════════════════════════════════════════════════
 
-class UTC12_LoadVideoMeta(unittest.TestCase):
+class UTC12b_LoadVideoMeta(unittest.TestCase):
 
     def test_nonexistent_file_raises(self):
         from ez_worker.io.video import load_video_meta
@@ -547,7 +547,7 @@ class UTC12_LoadVideoMeta(unittest.TestCase):
 # UTC-13  Event schema field contracts
 # ══════════════════════════════════════════════════════════════════════════════
 
-class UTC13_EventContracts(unittest.TestCase):
+class UTC08_ProviderContracts(unittest.TestCase):
 
     def test_event_type_touch_valid(self):
         e = Event(frame_index=0, time_seconds=0.0, event_type='touch')
@@ -586,10 +586,10 @@ class UTC13_EventContracts(unittest.TestCase):
         self.assertEqual(e.target_track_id, 2)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# UTC-14  BBox geometry
+# UTC-09  Track geometry — BBox calculations
 # ══════════════════════════════════════════════════════════════════════════════
 
-class UTC14_BBoxGeometry(unittest.TestCase):
+class UTC09_TrackGeometry(unittest.TestCase):
 
     def test_cx_center_horizontal(self):
         self.assertAlmostEqual(BBox(x1=0, y1=0, x2=100, y2=50).cx, 50.0)
@@ -612,10 +612,10 @@ class UTC14_BBoxGeometry(unittest.TestCase):
         self.assertEqual(d, {'x1': 1, 'y1': 2, 'x2': 3, 'y2': 4})
 
 # ══════════════════════════════════════════════════════════════════════════════
-# UTC-15  AnalysisArtifacts composition
+# UTC-11  Clustering output — AnalysisArtifacts composition
 # ══════════════════════════════════════════════════════════════════════════════
 
-class UTC15_AnalysisArtifacts(unittest.TestCase):
+class UTC11_ClusterArtifacts(unittest.TestCase):
 
     def test_empty_artifacts_valid(self):
         a = make_artifacts()
@@ -651,10 +651,10 @@ class UTC15_AnalysisArtifacts(unittest.TestCase):
         self.assertIsInstance(d['video']['path'], str)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# UTC-16  TrackObservation field contracts
+# UTC-10  Spatial layer — TrackObservation contracts field contracts
 # ══════════════════════════════════════════════════════════════════════════════
 
-class UTC16_TrackObservationContracts(unittest.TestCase):
+class UTC10_SpatialContracts(unittest.TestCase):
 
     def test_label_player(self):
         obs = make_obs(0, 1, 'player')
@@ -700,3 +700,54 @@ class UTC16_TrackObservationContracts(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# UTC-15  _build_match_report() — match report JSON structure
+# ══════════════════════════════════════════════════════════════════════════════
+
+class UTC15_MatchReport(unittest.TestCase):
+    """Match report structure and field validation."""
+
+    def setUp(self):
+        self.tmpdir = Path(tempfile.mkdtemp())
+        self.video  = make_video()
+        obs_p = [make_obs(i, 1, team_id=0) for i in range(10)]
+        obs_b = [make_obs(i, 0, label='ball') for i in range(10)]
+        self.tracks = obs_p + obs_b
+        self.events = [make_event(3, 'pass', actor=1, target=2),
+                       make_event(7, 'shot_attempt', actor=1)]
+        self.stats  = build_track_stats(self.tracks, self.events, self.video)
+        arts = AnalysisArtifacts(video=self.video, tracks=self.tracks,
+                                 events=self.events, stats=self.stats)
+        write_artifacts(arts, self.tmpdir)
+        with open(self.tmpdir / 'match_report.json') as f:
+            self.report = json.load(f)
+
+    def test_tc01_match_report_has_required_keys(self):
+        """Match report contains all required top-level sections."""
+        for key in ('summary', 'events', 'players', 'pass_network'):
+            self.assertIn(key, self.report)
+
+    def test_tc02_match_report_summary_keys(self):
+        """Match report summary section contains all required fields."""
+        s = self.report['summary']
+        for key in ('total_passes', 'total_shots', 'total_touches'):
+            self.assertIn(key, s)
+
+    def test_tc03_match_report_duration_s(self):
+        """Match duration is calculated correctly from frame count and frame rate."""
+        expected = self.video.frame_count / self.video.fps
+        self.assertAlmostEqual(self.report['duration_s'], expected, places=2)
+
+    def test_tc04_pass_network_in_match_report(self):
+        """Match report includes a pass network section."""
+        self.assertIn('pass_network', self.report)
+
+    def test_tc05_events_json_is_list(self):
+        """Events section in match report is a list."""
+        self.assertIsInstance(self.report['events'], list)
+
+
+if __name__ == "__main__":
+    unittest.main()

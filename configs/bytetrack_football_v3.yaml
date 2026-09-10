@@ -1,0 +1,45 @@
+# ByteTrack v3 — fixes RC-2 (see docs/product_plan.ipynb, Root Cause Analysis 2026-09-10)
+#
+# What was wrong in v1/v2 (both shipped these same three values):
+#
+#   track_high_thresh: 0.20   with YOLO conf also 0.20  ->  the low-score bucket
+#     [track_low_thresh, track_high_thresh) is ALWAYS EMPTY, because YOLO never
+#     emits a box below its own conf threshold. ByteTrack's second association —
+#     the entire reason it beats SORT, recovering occluded players from weak
+#     detections — was therefore fed nothing, every run.
+#
+#   fuse_score: true          ->  stage-2 cost is 1 - IoU*score against a
+#     HARDCODED thresh of 0.5. A detection scoring < 0.20 would need IoU > 2.5
+#     to match. Mathematically impossible, so stage 2 could never fire anyway.
+#
+#   new_track_thresh: 0.20    ->  any unmatched detection immediately minted a
+#     fresh ID. Measured on BrightonGoal: 1220 IDs for ~12 concurrent players.
+#
+# The fix — run with --detection-confidence 0.20 (UNCHANGED from Pipeline C):
+#
+#   The low bucket does not need weaker detections, it needs the TRACKER's high
+#   threshold to sit ABOVE the DETECTOR's threshold. With YOLO at 0.20 and
+#   track_high_thresh at 0.50, the bucket [0.20, 0.50) is full of real-but-
+#   uncertain boxes — exactly what ByteTrack's second stage was designed for.
+#
+#   A first attempt used --detection-confidence 0.10 to fill that bucket. It did
+#   cut ID churn (demo 510 -> 142 minted IDs, Brighton 1220 -> 263) but also let
+#   crowd and motion-blur detections through, and because tracking was now
+#   STABLE those stuck as long-lived junk tracks: demo 26 -> 31 players,
+#   Brighton 34 -> 40, plus a spurious double clearance one frame apart. Keeping
+#   the detector at 0.20 gets the tracking win without the junk.
+#
+#   - fuse_score false        ->  stage-2 matching is pure IoU, independent of
+#     detection confidence, which is the point of the low-score stage. (With it
+#     true, a sub-0.20 detection needed IoU > 2.5 to match: impossible.)
+#   - new_track_thresh 0.60   ->  only a confident, genuinely new object starts
+#     a new ID. Marginal detections continue existing tracks instead.
+#
+tracker_type: bytetrack
+track_high_thresh: 0.50   # was 0.20 — first association uses confident boxes only
+track_low_thresh: 0.20    # was 0.05 — sits AT the YOLO conf threshold, so the
+                          #            second-association bucket is [0.20, 0.50)
+new_track_thresh: 0.60    # was 0.20 — the ID-explosion fix
+track_buffer: 90          # unchanged — 3.6 s at 25 fps, survives long occlusions
+match_thresh: 0.85        # unchanged — permissive first-stage IoU gate
+fuse_score: false         # was true — un-breaks the second association

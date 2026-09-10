@@ -23,6 +23,7 @@ Usage:
 """
 from __future__ import annotations
 
+import bisect
 import json
 import math
 import shutil
@@ -39,6 +40,14 @@ import numpy as np
 from ez_worker.analytics.events import detect_events
 from ez_worker.config import DEFAULT_CONFIG
 from ez_worker.schemas import TrackObservation, VideoMeta
+
+# Pitch model vertex table — lets a per-frame keypoint index be resolved to its
+# (x_cm, y_cm) landmark even when that index is absent from the best frame.
+try:
+    from sports.configs.soccer import SoccerPitchConfiguration
+    _VERT = SoccerPitchConfiguration().vertices
+except Exception:
+    _VERT = []
 
 # ── CLI args ──────────────────────────────────────────────────────────────────
 _args = sys.argv[1:]
@@ -155,6 +164,65 @@ if not force_pixel and kp_path.exists():
 
                 n_ball_outside_hull = 0
 
+                # ── Per-frame homography (RC-1 fix) ───────────────────────────
+                # A single H calibrated on one frame drifts as the camera pans:
+                # measured camera travel from the best frame was 434 px median on
+                # the benchmark clip but 3106 px on a panning highlight, which is
+                # more than a frame width — so "pitch cm" became fiction. When
+                # pitch_keypoints_per_frame.json is present, use the homography
+                # from the NEAREST sampled frame instead of one for the whole clip.
+                H_samples: dict[int, np.ndarray] = {}
+                pf_path = run_dir / "pitch_keypoints_per_frame.json"
+                if pf_path.exists():
+                    try:
+                        pf = json.loads(pf_path.read_text())
+                        for fstr, entry in pf.get("frames", {}).items():
+                            kps = entry.get("keypoints", {})
+                            sp, sc = [], []
+                            for idx_str, px_pos in kps.items():
+                                if idx_str in kp_cm:
+                                    sp.append(px_pos)
+                                    sc.append(kp_cm[idx_str])
+                                elif int(idx_str) < len(_VERT):
+                                    sp.append(px_pos)
+                                    sc.append(list(_VERT[int(idx_str)]))
+                            if len(sp) < 6:
+                                continue
+                            Hs, mask = cv2.findHomography(
+                                np.array(sp, dtype=np.float32),
+                                np.array(sc, dtype=np.float32), cv2.RANSAC, 50.0)
+                            if Hs is None or mask is None or int(mask.sum()) < 5:
+                                continue
+                            rp = cv2.perspectiveTransform(
+                                np.array(sp, dtype=np.float32).reshape(-1, 1, 2), Hs
+                            ).reshape(-1, 2)
+                            err = np.sqrt(((rp - np.array(sc)) ** 2).sum(axis=1))
+                            if float(err[mask.ravel().astype(bool)].mean()) <= 100.0:
+                                H_samples[int(fstr)] = Hs
+                    except Exception as exc:
+                        print(f"  Per-frame homography unavailable ({exc}) - using single H.")
+
+                if H_samples:
+                    _skeys = sorted(H_samples)
+                    _max_gap = int(pf.get("stride", 10)) * 3
+                    print(f"  Per-frame homography: {len(H_samples)} valid matrices "
+                          f"(of {len(pf.get('frames', {}))} sampled), max gap {_max_gap} frames")
+
+                    def H_for(fi: int) -> np.ndarray:
+                        j = bisect.bisect_left(_skeys, fi)
+                        best, bd = None, None
+                        for k in (j - 1, j):
+                            if 0 <= k < len(_skeys):
+                                d = abs(_skeys[k] - fi)
+                                if bd is None or d < bd:
+                                    best, bd = _skeys[k], d
+                        return H_samples[best] if best is not None and bd <= _max_gap else H
+                else:
+                    print("  Per-frame homography: none - using the single best-frame H.")
+
+                    def H_for(fi: int) -> np.ndarray:
+                        return H
+
                 for fi, frame_tracks in by_frame.items():
                     frame_players: dict[int, tuple[float, float]] = {}
 
@@ -187,7 +255,7 @@ if not force_pixel and kp_path.exists():
                     # Batch-transform all points in one perspectiveTransform call
                     raw_px = np.array([[p[2], p[3]] for p in all_pts], dtype=np.float32)
                     transformed = cv2.perspectiveTransform(
-                        raw_px.reshape(-1, 1, 2), H
+                        raw_px.reshape(-1, 1, 2), H_for(fi)
                     ).reshape(-1, 2)
 
                     for (role, tid, _, _), (x_cm, y_cm) in zip(all_pts, transformed):

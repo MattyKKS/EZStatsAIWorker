@@ -16,7 +16,10 @@
       "Bash(ls -la src/ez_worker/postprocess/siglip_merge.py)",
       "Bash(grep -n \"merge-tracklets\\\\|merge_tracklets\\\\|siglip_merge\" src/ez_worker/cli.py)",
       "Bash(xargs grep -ln \"tracklet\\\\|siglip_merge\\\\|merge_tracklet\\\\|cosine.*similar\")",
-      "Bash(python -m src.ez_worker.postprocess.report_cleanup outputs/20260608_224414 --apply)"
+      "Bash(python -m src.ez_worker.postprocess.report_cleanup outputs/20260608_224414 --apply)",
+      "Bash(git add *)",
+      "Bash(git commit -q -m 'Add backend integration spec \\(data contract + API + handoff for backend repo\\) *)",
+      "Bash(git push *)"
     ]
   }
 }

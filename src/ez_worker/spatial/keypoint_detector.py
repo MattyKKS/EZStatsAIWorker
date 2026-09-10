@@ -20,7 +20,17 @@ def detect_pitch_keypoints(
     run_dir: Path,
     model_path: Path | None = None,
     api_key: str | None = None,
+    per_frame_stride: int | None = None,
 ) -> Path:
+    """Detect pitch keypoints and write `pitch_keypoints.json`.
+
+    When `per_frame_stride` is given, ALSO writes `pitch_keypoints_per_frame.json`
+    holding the keypoints of every sampled frame, so downstream code can build a
+    homography that follows the camera instead of one fixed matrix for the whole
+    clip (RC-1). The single-best-frame output is byte-identical either way: the
+    "best" frame is still chosen only from multiples of STRIDE, so enabling this
+    cannot change any existing result.
+    """
     run_dir = run_dir.resolve()
 
     summary_path = run_dir / "summary.json"
@@ -40,6 +50,7 @@ def detect_pitch_keypoints(
 
     use_api = api_key and (model_path is None or not Path(model_path).exists())
 
+    per_frame: dict[str, dict] = {}
     if use_api:
         print(f"  Using Roboflow inference API (model: {ROBOFLOW_MODEL_ID})")
         result_kps, best_frame_idx = _detect_via_api(cap, api_key, total, w, h)
@@ -52,7 +63,9 @@ def detect_pitch_keypoints(
                 "Pass --api-key YOUR_ROBOFLOW_KEY to use the cloud API instead."
             )
         print(f"  Using local model: {model_path}")
-        result_kps, best_frame_idx = _detect_via_local(cap, model_path, total, w, h)
+        result_kps, best_frame_idx, per_frame = _detect_via_local(
+            cap, model_path, total, w, h, per_frame_stride
+        )
 
     cap.release()
 
@@ -71,10 +84,23 @@ def detect_pitch_keypoints(
     output_path = run_dir / "pitch_keypoints.json"
     output_path.write_text(json.dumps(output, indent=2), encoding="utf-8")
     print(f"  Detected {best_count} pitch keypoints → {output_path}")
+
+    if per_frame:
+        usable = sum(1 for v in per_frame.values() if len(v["keypoints"]) >= 6)
+        pf = {
+            "video_wh": [w, h],
+            "stride": per_frame_stride,
+            "frames": per_frame,
+        }
+        pf_path = run_dir / "pitch_keypoints_per_frame.json"
+        pf_path.write_text(json.dumps(pf), encoding="utf-8")
+        print(f"  Per-frame keypoints: {len(per_frame)} sampled, "
+              f"{usable} with >=6 points (homography-capable) → {pf_path.name}")
     return output_path
 
 
-def _detect_via_local(cap, model_path: Path, total: int, w: int, h: int):
+def _detect_via_local(cap, model_path: Path, total: int, w: int, h: int,
+                      per_frame_stride: int | None = None):
     try:
         from ultralytics import YOLO
     except ImportError as exc:
@@ -85,15 +111,23 @@ def _detect_via_local(cap, model_path: Path, total: int, w: int, h: int):
     best_count = 0
     best_frame_idx = 0
     frame_idx = 0
+    per_frame: dict[str, dict] = {}
+
+    # Sample at the finer of the two strides, but only let multiples of STRIDE
+    # compete for "best frame" — so turning per-frame capture on never changes
+    # the single-homography result that existing runs depend on.
+    step = min(STRIDE, per_frame_stride) if per_frame_stride else STRIDE
 
     while True:
         ok, frame = cap.read()
         if not ok:
             break
-        if frame_idx % STRIDE == 0:
+        if frame_idx % step == 0:
             result = model(frame, verbose=False)[0]
             kps = _parse_local_keypoints(result)
-            if len(kps) > best_count:
+            if per_frame_stride and frame_idx % per_frame_stride == 0 and kps:
+                per_frame[str(frame_idx)] = {"keypoints": kps}
+            if frame_idx % STRIDE == 0 and len(kps) > best_count:
                 best_count = len(kps)
                 best_kps = kps
                 best_frame_idx = frame_idx
@@ -101,7 +135,7 @@ def _detect_via_local(cap, model_path: Path, total: int, w: int, h: int):
         frame_idx += 1
 
     print()
-    return best_kps, best_frame_idx
+    return best_kps, best_frame_idx, per_frame
 
 
 def _detect_via_api(cap, api_key: str, total: int, w: int, h: int):

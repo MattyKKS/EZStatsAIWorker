@@ -37,6 +37,10 @@ from .track_color import torso_hsv
 PITCH_L = 12000.0
 PITCH_W = 7000.0
 
+# At most this many tracks may be removed as officials. Above it, the dark
+# low-saturation group is a team kit, not the referee crew (see build_plan).
+MAX_REFEREES = 4
+
 
 def _foot(o, W, H):
     b = o["bbox"]
@@ -141,6 +145,73 @@ def detect_id_swaps(survivors, footframes, crops, *, cross_px=20.0,
     return swaps
 
 
+def _chroma_feat(hsv):
+    """Torso colour -> (cx, cy, v).
+
+    Hue is converted to a saturation-weighted chroma vector so that it stays
+    continuous across the 0/180 wrap-around, and so that greys (black, white,
+    silver) collapse toward the origin instead of landing on an arbitrary hue.
+    Those achromatic kits are then separated by `v` (value/brightness) instead.
+    Ch.6 of the DIP course: hue/saturation carry the colour, value carries the
+    intensity -- keeping them on separate axes is the whole point of HSV.
+    """
+    Hc, S, V = hsv
+    th = math.radians(float(Hc) * 2.0)      # OpenCV hue is 0..180 == 0..360 deg
+    s, v = float(S) / 255.0, float(V) / 255.0
+    return (s * math.cos(th), s * math.sin(th), v)
+
+
+def learn_kit_buckets(survivors, color, *, min_per_side=3, min_sep=0.15, k=3):
+    """Learn the two kit colours FROM THIS VIDEO instead of hard-coding them.
+
+    k-means over `_chroma_feat`, seeded farthest-point-first so the result is
+    deterministic (no RNG). Returns {tid: "A"|"B"} for the tracks belonging to
+    the two LARGEST clusters, or None when the kits are not cleanly separable.
+
+    k=3, not 2, on purpose: goalkeepers wear a colour deliberately unlike either
+    outfield kit, so with k=2 the keeper's cluster captures one whole seed and
+    every outfield player collapses into the other. The third cluster absorbs
+    the keeper (and any stray official); tracks outside the two biggest clusters
+    are simply left with the team the classifier gave them.
+
+    This is the general form of the GREEN/WHITE rule -- it works for blue-vs-black
+    or pink-vs-white equally well, because nothing about the kit is assumed.
+    """
+    pts = [(tid, _chroma_feat(color[tid])) for tid in survivors if color.get(tid)]
+    if len(pts) < 2 * min_per_side:
+        return None
+
+    def d2(a, b):
+        return sum((x - y) ** 2 for x, y in zip(a, b))
+
+    k = max(2, min(k, len(pts)))
+    centres = [max(pts, key=lambda p: p[1][2])[1]]                 # brightest torso
+    while len(centres) < k:                                        # farthest-point seeding
+        centres.append(max(pts, key=lambda p: min(d2(p[1], c) for c in centres))[1])
+
+    for _ in range(30):                                            # Lloyd iterations
+        groups = [[] for _ in centres]
+        for _tid, f in pts:
+            groups[min(range(k), key=lambda i: d2(f, centres[i]))].append(f)
+        moved = [tuple(sum(c) / len(g) for c in zip(*g)) if g else centres[i]
+                 for i, g in enumerate(groups)]
+        if all(d2(a, b) < 1e-9 for a, b in zip(moved, centres)):
+            break
+        centres = moved
+
+    assign = {tid: min(range(k), key=lambda i: d2(f, centres[i])) for tid, f in pts}
+    counts = Counter(assign.values())
+    if len(counts) < 2:
+        return None
+    (a_id, a_n), (b_id, b_n) = counts.most_common(2)
+    if min(a_n, b_n) < min_per_side:
+        return None                                                # one side too small
+    if math.sqrt(d2(centres[a_id], centres[b_id])) < min_sep:
+        return None                                                # kits too similar
+    return {tid: ("A" if c == a_id else "B")
+            for tid, c in assign.items() if c in (a_id, b_id)}
+
+
 def correct_teams_by_color(survivors, color, orig_team):
     """Override team_id by dominant jersey colour where colour is confident.
 
@@ -158,12 +229,31 @@ def correct_teams_by_color(survivors, color, orig_team):
     for cb, ctr in buckets.items():
         if ctr:
             mapping[cb] = ctr.most_common(1)[0][0]
-    # guard: the two colours must map to different team_ids to trust the vote
+
+    bucket_of = {tid: _color_team(color.get(tid)) for tid in survivors}
+
+    # guard: the two colours must map to different team_ids to trust the vote.
+    # FALLBACK (2026-09-10): when the hard-coded GREEN/WHITE pair does not apply
+    # to this match, learn the two kit colours from the video itself. Only runs
+    # when the original path fails, so videos it already handles are unaffected.
     if len(set(mapping.values())) < 2:
-        return dict(orig_team), []
+        learned = learn_kit_buckets(survivors, color)
+        if learned is None:
+            return dict(orig_team), []
+        bucket_of = learned
+        buckets = {"A": Counter(), "B": Counter()}
+        for tid, cb in learned.items():
+            if orig_team.get(tid) is not None:
+                buckets[cb][orig_team[tid]] += 1
+        mapping = {cb: ctr.most_common(1)[0][0] for cb, ctr in buckets.items() if ctr}
+        if len(set(mapping.values())) < 2:
+            # both learned kits voted for the same team_id -> the classifier
+            # collapsed. Split them explicitly onto team 0 / team 1 instead.
+            mapping = {"A": 0, "B": 1}
+
     corrected, changes = {}, []
     for tid in survivors:
-        cb = _color_team(color.get(tid))
+        cb = bucket_of.get(tid)
         new = mapping[cb] if cb in mapping else orig_team.get(tid)
         corrected[tid] = new
         if new is not None and orig_team.get(tid) is not None and new != orig_team[tid]:
@@ -171,7 +261,7 @@ def correct_teams_by_color(survivors, color, orig_team):
     return corrected, changes
 
 
-def build_plan(run_dir: Path) -> dict:
+def build_plan(run_dir: Path, *, goal_frames=None, auto_goal: bool = True) -> dict:
     rd = Path(run_dir).resolve()
     tracks = json.loads((rd / "tracks_with_teams.json").read_text(encoding="utf-8"))
     vm = json.loads((rd / "video_meta.json").read_text(encoding="utf-8"))
@@ -215,7 +305,13 @@ def build_plan(run_dir: Path) -> dict:
     survivors = [t for t in report_tids if t not in remap]
 
     # 2) referee removal by torso colour (dark + low saturation)
-    refs = []
+    #
+    # GUARD (2026-09-10): a match has at most ~3 visible officials. If the dark
+    # low-saturation group is larger than that, it is a TEAM KIT, not the
+    # officials -- e.g. Brighton vs Fulham, where Fulham's black away kit made
+    # this rule delete nine outfield players. In that case remove nobody: an
+    # unfiltered referee is a far cheaper error than a deleted team.
+    ref_candidates = []
     color = {}
     for tid in survivors:
         d = crops / f"track_{tid:04d}"
@@ -227,7 +323,15 @@ def build_plan(run_dir: Path) -> dict:
         Hc, S, V = (float(x) for x in hsv)
         color[tid] = (Hc, S, V)
         if V < 150 and S < 60 and tid not in protected:
-            refs.append(tid)
+            ref_candidates.append(tid)
+
+    if len(ref_candidates) > MAX_REFEREES:
+        refs = []
+        ref_note = (f"dark-torso group has {len(ref_candidates)} tracks "
+                    f"(> {MAX_REFEREES}) -> treated as a TEAM KIT, none removed")
+    else:
+        refs = ref_candidates
+        ref_note = ""
 
     # 3) off-pitch removal via homography
     offpitch = []
@@ -303,6 +407,7 @@ def build_plan(run_dir: Path) -> dict:
         "raw_players": len(report_tids),
         "after_merge": len(survivors),
         "refs": sorted(refs),
+        "ref_note": ref_note,
         "offpitch": sorted(offpitch),
         "gk_cluster": sorted(gk_cluster),
         "gk_keeper": (max(gk_cluster, key=lambda t: geo[t]["n"]) if len(gk_cluster) > 1 else None),
@@ -319,7 +424,133 @@ def build_plan(run_dir: Path) -> dict:
         "team_changes": team_changes,
         "swaps": swaps,
         "swap_dist": swap_dist,
+        "fps": vm.get("fps", 25.0),
+        "goal_frames": list(goal_frames or []),
+        "auto_goal": auto_goal,
     }
+
+
+def recompute_possession(run_dir: Path, corrected_team: dict, remap: dict):
+    """Real possession: share of FRAMES each team holds the ball.
+
+    The writer computes possession as the share of `touch` *events* per team,
+    which on a clip with two touches yields "50.0 / 50.0" or "100 / 0" -- a count
+    of two events, not time on the ball.
+
+    Here a frame is credited to the team of the nearest player whose foot is
+    within `own_radius` player-heights of the ball. Using the player's own bbox
+    height as the ruler makes the radius scale-free, so it means the same thing
+    at 720p and 1080p, zoomed in or out (RC-3). Returns {} if inputs are missing.
+    """
+    rd = Path(run_dir)
+    tf = rd / "tracks_with_teams.json"
+    if not tf.exists():
+        return {}
+    try:
+        obs = json.loads(tf.read_text(encoding="utf-8"))
+        vm = json.loads((rd / "video_meta.json").read_text(encoding="utf-8"))
+        W, H = vm["width"], vm["height"]
+        own_radius = 1.6                       # in player-heights (~2.9 m)
+
+        by_frame = defaultdict(lambda: {"ball": None, "players": []})
+        for o in obs:
+            f = o["frame_index"]
+            if o.get("label") == "ball":
+                by_frame[f]["ball"] = o
+            elif o.get("track_id") is not None:
+                by_frame[f]["players"].append(o)
+
+        held = Counter()
+        for f, d in by_frame.items():
+            b = d["ball"]
+            if b is None or not d["players"]:
+                continue
+            bx = (b["bbox"]["x1"] + b["bbox"]["x2"]) / 2 * W
+            by = b["bbox"]["y2"] * H
+            best, best_d = None, 1e18
+            for p in d["players"]:
+                bb = p["bbox"]
+                ph = (bb["y2"] - bb["y1"]) * H
+                if ph < 10:
+                    continue
+                px = (bb["x1"] + bb["x2"]) / 2 * W
+                py = bb["y2"] * H
+                dist = math.hypot(px - bx, py - by) / ph      # in player-heights
+                if dist < best_d:
+                    best, best_d = p, dist
+            if best is None or best_d > own_radius:
+                continue
+            tid = best["track_id"]
+            tid = remap.get(tid, tid)
+            team = corrected_team.get(tid, best.get("team_id"))
+            if team is not None:
+                held[team] += 1
+
+        total = sum(held.values())
+        if not total:
+            return {}
+        return {str(t): round(n / total * 100, 1) for t, n in sorted(held.items())}
+    except Exception:
+        return {}
+
+
+def _ball_pitch(run_dir: Path):
+    """{frame_index: (pitch_x_cm, pitch_y_cm)} for the ball, via best-frame H.
+    Returns {} if pitch keypoints or tracks are unavailable."""
+    rd = Path(run_dir)
+    kpf = rd / "pitch_keypoints.json"
+    tf = rd / "tracks.json"
+    if not (kpf.exists() and tf.exists()):
+        return {}
+    try:
+        kp = json.loads(kpf.read_text(encoding="utf-8"))
+        Hm, _ = _homography(kp)
+        vm = json.loads((rd / "video_meta.json").read_text(encoding="utf-8"))
+        W, H = vm["width"], vm["height"]
+        out = {}
+        for t in json.loads(tf.read_text(encoding="utf-8")):
+            if t.get("label") == "ball":
+                b = t["bbox"]
+                cx = (b["x1"] + b["x2"]) / 2 * W
+                cy = (b["y1"] + b["y2"]) / 2 * H
+                out[t["frame_index"]] = _project(Hm, cx, cy)
+        return out
+    except Exception:
+        return {}
+
+
+def mark_goals(rep: dict, run_dir: Path, fps: float, manual_frames, auto: bool):
+    """Relabel a `shot` event as `goal`. Manual frames are authoritative; the
+    auto pass marks a shot whose ball reaches the goal mouth within ~3s
+    (approximate — homography is unreliable for airborne balls)."""
+    events = rep.setdefault("events", [])
+
+    def _shots():
+        return [e for e in events if e.get("type") == "shot"]
+
+    for gf in manual_frames:
+        near = [e for e in _shots() if abs(e.get("frame", -10**9) - gf) <= 1.5 * fps]
+        if near:
+            best = min(near, key=lambda e: abs(e["frame"] - gf))
+            best["type"] = "goal"; best["_goal"] = "manual"
+        else:  # no shot detected there — insert a standalone goal event
+            events.append({"type": "goal", "frame": int(gf),
+                           "time_s": round(gf / fps, 2),
+                           "actor": None, "actor_label": None,
+                           "target": None, "target_label": None,
+                           "details": {"source": "manual"}})
+
+    if auto:
+        ball = _ball_pitch(run_dir)
+        if ball:
+            L = 12000.0
+            for e in _shots():
+                f = e.get("frame", 0)
+                win = [ball[k] for k in ball if f < k <= f + int(3 * fps)]
+                if any((px < 700 or px > L - 700) and 2500 <= py <= 4500 for px, py in win):
+                    e["type"] = "goal"; e["_goal"] = "auto"
+
+    rep["events"] = sorted(events, key=lambda e: e.get("frame", 0))
 
 
 def write_report(run_dir: Path, plan: dict) -> Path:
@@ -401,6 +632,21 @@ def write_report(run_dir: Path, plan: dict) -> Path:
         if e.get("target") in label_of:
             e["target_label"] = label_of[e["target"]]
 
+    # real possession (frames on the ball) instead of the writer's touch-count share
+    poss = recompute_possession(rd, plan.get("corrected_team", {}), plan.get("remap", {}))
+    if poss:
+        rep["possession"] = poss
+
+    # mark goals (manual frames authoritative; conservative auto pass)
+    mark_goals(rep, rd, plan.get("fps", 25.0),
+               plan.get("goal_frames", []), plan.get("auto_goal", True))
+    # refresh labels for any goal event that kept actor/target
+    for e in rep.get("events", []):
+        if e.get("actor") in label_of:
+            e["actor_label"] = label_of[e["actor"]]
+        if e.get("target") in label_of:
+            e["target_label"] = label_of[e["target"]]
+
     # recompute summary counts from the (corrected) events
     if "summary" in rep:
         cnt = Counter(e.get("type") for e in rep.get("events", []))
@@ -447,6 +693,8 @@ def print_plan(plan: dict) -> None:
     print(f"raw players          : {plan['raw_players']}")
     print(f"after tracklet merge : {plan['after_merge']}")
     print(f"referees removed     : {plan['refs']}")
+    if plan.get("ref_note"):
+        print(f"  ! referee filter   : {plan['ref_note']}")
     print(f"off-pitch removed    : {plan['offpitch']}")
     print(f"GK cluster           : {plan['gk_cluster']}  -> keep #{plan['gk_keeper']}")
     print(f"protected (events)   : {plan['protected']}")
@@ -463,10 +711,22 @@ def print_plan(plan: dict) -> None:
 
 if __name__ == "__main__":
     import sys
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    argv = sys.argv[1:]
+    args = [a for a in argv if not a.startswith("--")]
+    # --goal-frame N (repeatable) marks the shot near frame N as a goal
+    goal_frames = []
+    for i, a in enumerate(argv):
+        if a == "--goal-frame" and i + 1 < len(argv):
+            try:
+                goal_frames.append(int(argv[i + 1]))
+            except ValueError:
+                pass
+    auto_goal = "--no-auto-goal" not in argv
     rd = Path(args[0] if args else "outputs/20260608_224414")
-    plan = build_plan(rd)
+    plan = build_plan(rd, goal_frames=goal_frames, auto_goal=auto_goal)
     print_plan(plan)
+    if goal_frames or not auto_goal:
+        print(f"goal frames (manual): {goal_frames}   auto-goal: {auto_goal}")
     if "--apply" in sys.argv:
         out = write_report(rd, plan)
         print(f"\nWrote {out}")

@@ -220,6 +220,17 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
     )
     detect_kp.add_argument("--api-key", default=None, help="Roboflow API key for cloud inference.")
+    detect_kp.add_argument(
+        "--per-frame-stride",
+        type=int,
+        default=None,
+        help=(
+            "Also write pitch_keypoints_per_frame.json, sampling every N frames, so events "
+            "can use a homography that tracks the camera instead of one fixed matrix for the "
+            "whole clip. 10 is a good default (0.4 s at 25 fps). Omitting this keeps the old "
+            "single-homography behaviour."
+        ),
+    )
 
     pitch_prep = subparsers.add_parser(
         "prepare-pitch-mapping",
@@ -466,7 +477,12 @@ def main() -> None:
 
     if args.command == "detect-pitch-keypoints":
         from ez_worker.spatial.keypoint_detector import detect_pitch_keypoints
-        output_path = detect_pitch_keypoints(args.run_dir, args.model_path, api_key=getattr(args, "api_key", None))
+        output_path = detect_pitch_keypoints(
+            args.run_dir,
+            args.model_path,
+            api_key=getattr(args, "api_key", None),
+            per_frame_stride=getattr(args, "per_frame_stride", None),
+        )
         print(output_path)
         return
 
