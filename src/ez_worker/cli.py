@@ -137,6 +137,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     apply_teams.add_argument("--run-dir", type=Path, required=True)
 
+    assign_color = subparsers.add_parser(
+        "assign-teams-color",
+        help=(
+            "Assign one team per track from jersey colour (top-half crop, KMeans "
+            "background removal via corner vote). More accurate than the SigLIP path "
+            "on our benchmark and decided once per track, so a player cannot change "
+            "team between frames. Run after apply-team-clusters to override it."
+        ),
+    )
+    assign_color.add_argument("--run-dir", type=Path, required=True)
+    assign_color.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report what would change without rewriting tracks_with_teams.json.",
+    )
+
     team_report = subparsers.add_parser(
         "build-team-report",
         help="Build a simple team-aware report from provisional team assignments.",
@@ -297,6 +313,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Draw detected pitch keypoints (dots + edges) on the video for debugging.",
     )
     stats_video.add_argument(
+        "--from-tracks",
+        action="store_true",
+        help=(
+            "Draw-only mode: render the pipeline's own tracks instead of re-detecting, "
+            "re-tracking and re-classifying teams per frame. The drawn ID then IS the ID "
+            "in match_report.json rather than an 80px nearest-point re-association, and "
+            "the drawn team is the team the stats used. Needs pitch_keypoints_per_frame.json "
+            "for the radar (detect-pitch-keypoints --per-frame-stride)."
+        ),
+    )
+    stats_video.add_argument(
         "--no-ball-detector",
         action="store_true",
         help="Skip the dedicated ball model; draw the ball from saved tracks.json positions instead.",
@@ -415,6 +442,21 @@ def main() -> None:
         print(output_path)
         return
 
+    if args.command == "assign-teams-color":
+        from ez_worker.appearance.team_color import apply_to_run
+
+        result = apply_to_run(args.run_dir, write=not args.dry_run)
+        if not result.get("ok"):
+            print(f"  Colour team assignment skipped: {result.get('reason')}")
+            return
+        print(f"  Teams from jersey colour: {result['tracks']} tracks, "
+              f"per-team {result['per_team']}")
+        changed = result["changed_vs_siglip"]
+        print(f"  Differs from the SigLIP assignment on {len(changed)} track(s): {changed}")
+        if args.dry_run:
+            print("  (dry run — tracks_with_teams.json not modified)")
+        return
+
     if args.command == "build-team-report":
         output_path = build_team_report(args.run_dir)
         print(output_path)
@@ -517,6 +559,12 @@ def main() -> None:
         return
 
     if args.command == "render-stats-video":
+        if getattr(args, "from_tracks", False):
+            from ez_worker.io.render_from_tracks import render_from_tracks
+
+            output_path = render_from_tracks(args.run_dir)
+            print(output_path)
+            return
         output_path = render_stats_video(
             args.run_dir,
             pitch_model_path=getattr(args, "pitch_model_path", None),

@@ -96,21 +96,20 @@ Invoke-Step "prepare-appearance"  { ez-worker prepare-appearance --run-dir $runD
 Invoke-Step "cluster-teams"       { ez-worker cluster-teams --run-dir $runDir --method siglip --cluster-count 2 }
 Invoke-Step "apply-team-clusters" { ez-worker apply-team-clusters --run-dir $runDir }
 
+
 # RC-1: sample keypoints across the clip, not just the single best frame.
 Invoke-Step "detect-pitch-keypoints" -AllowFailure {
     ez-worker detect-pitch-keypoints --run-dir $runDir --model-path $PITCH_MODEL --per-frame-stride $kpStrideEff
 }
 
-if (-not $SkipVideo) {
-    Invoke-Step "render-stats-video" {
-        ez-worker render-stats-video --run-dir $runDir --pitch-model-path $PITCH_MODEL --player-model-path $PLAYER_MODEL --ball-model-path $BALL_MODEL
-    }
-} else {
-    Write-Host "`n--- render-stats-video SKIPPED (-SkipVideo) ---"
-}
-
 Invoke-Step "rerun-events"             { python rerun_events.py $runDir }
 Invoke-Step "apply-team-clusters (sync)" { ez-worker apply-team-clusters --run-dir $runDir }
+
+# Teams from jersey colour: ONE decision per track, overriding SigLIP. Must run
+# AFTER the sync above, which rewrites team_id from the SigLIP clusters and would
+# otherwise undo this. On the benchmark it corrects tracks 3 and 14 (both confirmed
+# SigLIP errors) and, being per-track, removes team flicker entirely.
+Invoke-Step "assign-teams-color" -AllowFailure { ez-worker assign-teams-color --run-dir $runDir }
 
 # report_cleanup is a real step now — every run emits match_report_merged.json.
 Invoke-Step "report-cleanup" -AllowFailure {
@@ -119,6 +118,14 @@ Invoke-Step "report-cleanup" -AllowFailure {
     } else {
         python -m src.ez_worker.postprocess.report_cleanup $runDir --apply
     }
+}
+
+# Render LAST: --from-tracks draws the pipeline's own tracks, so it needs the final
+# events and the final team assignment to already be on disk.
+if (-not $SkipVideo) {
+    Invoke-Step "render-stats-video" { ez-worker render-stats-video --run-dir $runDir --from-tracks }
+} else {
+    Write-Host "`n--- render-stats-video SKIPPED (-SkipVideo) ---"
 }
 
 $pipelineStart.Stop()

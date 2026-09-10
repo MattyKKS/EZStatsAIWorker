@@ -119,21 +119,28 @@ def main() -> None:
         "detect-pitch-keypoints", "--run-dir", run_dir, "--model-path", PITCH_MODEL,
         "--per-frame-stride", str(kp_stride)], allow_failure=True)
 
-    if a.skip_video:
-        print("\n--- render-stats-video SKIPPED (--skip-video) ---")
-    else:
-        step("render-stats-video", ez + [
-            "render-stats-video", "--run-dir", run_dir,
-            "--pitch-model-path", PITCH_MODEL, "--player-model-path", PLAYER_MODEL,
-            "--ball-model-path", BALL_MODEL])
-
     step("rerun-events", [sys.executable, "rerun_events.py", run_dir])
     step("apply-team-clusters (sync)", ez + ["apply-team-clusters", "--run-dir", run_dir])
+
+    # Teams from jersey colour: ONE decision per track, overriding SigLIP. Must run
+    # AFTER the sync above, which rewrites team_id from the SigLIP clusters and would
+    # otherwise undo this.
+    step("assign-teams-color", ez + ["assign-teams-color", "--run-dir", run_dir],
+         allow_failure=True)
 
     cleanup = [sys.executable, "-m", "src.ez_worker.postprocess.report_cleanup", run_dir, "--apply"]
     if a.goal_frame >= 0:
         cleanup += ["--goal-frame", str(a.goal_frame)]
     step("report-cleanup", cleanup, allow_failure=True)
+
+    # Render LAST: --from-tracks draws the pipeline's own tracks, so the final events
+    # and team assignment must already be on disk.
+    if a.skip_video:
+        print("
+--- render-stats-video SKIPPED (--skip-video) ---")
+    else:
+        step("render-stats-video", ez + ["render-stats-video", "--run-dir", run_dir,
+                                         "--from-tracks"])
 
     dt = time.time() - t_all
     print("\n" + "=" * 48)
