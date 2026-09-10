@@ -136,8 +136,7 @@ def main() -> None:
     # Render LAST: --from-tracks draws the pipeline's own tracks, so the final events
     # and team assignment must already be on disk.
     if a.skip_video:
-        print("
---- render-stats-video SKIPPED (--skip-video) ---")
+        print("\n--- render-stats-video SKIPPED (--skip-video) ---")
     else:
         step("render-stats-video", ez + ["render-stats-video", "--run-dir", run_dir,
                                          "--from-tracks"])
