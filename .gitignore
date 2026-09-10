@@ -5,9 +5,13 @@ __pycache__/
 *.pyo
 *.pyd
 
-data/
-outputs/
-artifacts/
-checkpoints/
+# Anchored to the repo root with a leading slash. Without it, `outputs/` also
+# matched `src/ez_worker/outputs/` and silently kept that whole source package
+# out of the repo — every fresh clone died with
+# `ModuleNotFoundError: No module named 'ez_worker.outputs'`.
+/data/
+/outputs/
+/artifacts/
+/checkpoints/
 
 share_chat.html
