@@ -12,12 +12,12 @@ def build_track_stats(
 ) -> list[TrackStats]:
     by_track: dict[int, list[TrackObservation]] = defaultdict(list)
     for obs in tracks:
-        if obs.label == "player":
+        if obs.label in ("player", "goalkeeper") and obs.source_label != "referee":
             by_track[obs.track_id].append(obs)
 
     touch_counts = Counter(event.actor_track_id for event in events if event.event_type == "touch")
     pass_counts = Counter(event.actor_track_id for event in events if event.event_type == "pass")
-    shot_counts = Counter(event.actor_track_id for event in events if event.event_type == "shot_attempt")
+    shot_counts = Counter(event.actor_track_id for event in events if event.event_type in ("shot", "shot_attempt", "goal"))
 
     stats: list[TrackStats] = []
     for track_id, obs_list in sorted(by_track.items()):

@@ -61,6 +61,8 @@ class UltralyticsTrackingProvider(TrackingProvider):
 
         tracks: list[TrackObservation] = []
         for result_index, result in enumerate(results):
+            if result_index % 100 == 0:
+                print(f"Player tracking: {result_index * config.frame_step}/{video.frame_count}", flush=True)
             source_frame_index = result_index * config.frame_step
             frame_tracks = self._result_to_tracks(
                 result,
@@ -100,7 +102,7 @@ class UltralyticsTrackingProvider(TrackingProvider):
         track_ids = (
             boxes.id.int().cpu().tolist()
             if getattr(boxes, "id", None) is not None
-            else list(range(len(xyxy_values)))
+            else [None] * len(xyxy_values)
         )
 
         observations: list[TrackObservation] = []
@@ -111,12 +113,16 @@ class UltralyticsTrackingProvider(TrackingProvider):
             if mapped_info is None:
                 continue
             label, source_label = mapped_info
+            # Prediction-only boxes have no identity. Never reuse array indexes
+            # as player IDs when the tracker has not confirmed a detection.
+            if track_id is None and label != "ball":
+                continue
 
             x1, y1, x2, y2 = xyxy
             observations.append(
                 TrackObservation(
                     frame_index=frame_index,
-                    track_id=int(track_id),
+                    track_id=int(track_id) if track_id is not None else 0,
                     label=label,
                     source_label=source_label,
                     confidence=float(confidence),
@@ -243,6 +249,9 @@ class UltralyticsTrackingProvider(TrackingProvider):
                 if frame_index % config.frame_step != 0:
                     frame_index += 1
                     continue
+
+                if frame_index % 100 == 0:
+                    print(f"Ball detection: {frame_index}/{video.frame_count}", flush=True)
 
                 results = model.predict(
                     source=frame,

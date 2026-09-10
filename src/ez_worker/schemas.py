@@ -36,6 +36,7 @@ class TrackObservation(BaseModel):
     confidence: float = Field(default=1.0)
     bbox: BBox
     team_id: int | None = None
+    is_interpolated: bool = False
 
 
 class Event(BaseModel):

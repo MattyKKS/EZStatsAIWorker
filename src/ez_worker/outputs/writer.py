@@ -114,7 +114,7 @@ def _build_match_report(artifacts: AnalysisArtifacts, output_dir: Path) -> dict:
             "total_touches":      type_counts.get("touch", 0),
             "total_passes":       type_counts.get("pass", 0),
             "total_interceptions": type_counts.get("interception", 0),
-            "total_shots":        type_counts.get("shot_attempt", 0),
+            "total_shots":        sum(type_counts.get(k, 0) for k in ("shot", "shot_attempt", "goal")),
             "total_goals":        type_counts.get("goal", 0),
         },
     }

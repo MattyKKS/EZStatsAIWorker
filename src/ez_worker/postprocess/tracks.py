@@ -266,13 +266,13 @@ def clean_ball_detections(
     cleaned_balls = _interpolate_ball_short_gaps(
         cleaned_balls,
         frame_step=frame_step,
-        max_gap_frames=max(ball_hold_max_gap_frames, 16),
+        max_gap_frames=ball_hold_max_gap_frames,
     )
     cleaned_balls = _refine_ball_timeseries_tutorial(
         cleaned_balls,
         video=video,
         frame_step=frame_step,
-        max_gap_frames=max(ball_hold_max_gap_frames, 16),
+        max_gap_frames=ball_hold_max_gap_frames,
         suspicious_hotspots=suspicious_hotspots,
     )
 
@@ -542,6 +542,7 @@ def _interpolate_ball_observation(
         update={
             "frame_index": frame_index,
             "confidence": max(0.12, min(prev.confidence, cur.confidence) * 0.95),
+            "is_interpolated": True,
             "bbox": prev.bbox.model_copy(
                 update={
                     "x1": _lerp(prev.bbox.x1, cur.bbox.x1, alpha),
@@ -569,7 +570,7 @@ def _refine_ball_timeseries_tutorial(
 
     # 1) Build denser per-frame ball series (tutorial-style interpolation focus).
     filled: list[TrackObservation] = [ordered[0]]
-    max_fill_gap = max(max_gap_frames * 2, 24)
+    max_fill_gap = max_gap_frames
     for prev, cur in zip(ordered, ordered[1:]):
         gap = cur.frame_index - prev.frame_index
         if gap > frame_step and gap <= max_fill_gap:
@@ -762,6 +763,7 @@ def _interpolate_observation(
         update={
             "frame_index": frame_index,
             "confidence": min(prev.confidence, cur.confidence) * 0.9,
+            "is_interpolated": True,
             "bbox": prev.bbox.model_copy(
                 update={
                     "x1": _lerp(prev.bbox.x1, cur.bbox.x1, alpha),

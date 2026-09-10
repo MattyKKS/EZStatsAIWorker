@@ -156,10 +156,17 @@ def render_from_tracks(
     for o in tracks:
         if o.label != "ball" and o.team_id is not None:
             team_of.setdefault(o.track_id, o.team_id)
+    referee_ids.update(o.track_id for o in tracks if o.source_label == "referee")
 
-    team_stats = _compute_team_stats(raw_stats, team_of)
+    team_stats = _compute_team_stats([], team_of)
     possession_by_frame = _compute_possession_by_frame(events, video.frame_count, team_of)
+    confirmed_possession = _load(run_dir, "possession_by_frame.json", {})
+    held = {0: 0, 1: 0}
     event_by_frame = {e.frame_index: e for e in events}
+    events_by_frame = defaultdict(list)
+    for event in events:
+        events_by_frame[event.frame_index].append(event)
+    last_event = None
 
     by_frame: dict[int, list[TrackObservation]] = defaultdict(list)
     for o in tracks:
@@ -180,6 +187,8 @@ def render_from_tracks(
     out_path = run_dir / "stats_video.mp4"
     W, H = video.width, video.height
     writer = cv2.VideoWriter(str(out_path), cv2.VideoWriter_fourcc(*"mp4v"), video.fps, (W, H))
+    if not writer.isOpened():
+        raise RuntimeError(f"Unable to open video writer: {out_path}")
     ball_trail = _SavedBallAnnotator() if show_ball_trail else None
     last_radar: Optional[np.ndarray] = None
 
@@ -245,7 +254,8 @@ def render_from_tracks(
                     radar = None
                     if kps is not None and len(dets) > 0:
                         try:
-                            radar = render_radar(dets, kps, colour, radar_config, ball_xy)
+                            radar = render_radar(dets, kps, colour, radar_config,
+                                                 ball_xy[0] if ball_xy is not None else None)
                         except Exception:
                             radar = None
                     if radar is None:
@@ -254,19 +264,35 @@ def render_from_tracks(
                         last_radar = radar
                     if radar is not None:
                         rh, rw = radar.shape[:2]
-                        scale = (W // 2) / rw
-                        small = cv2.resize(radar, (W // 2, int(rh * scale)))
+                        scale = (W // 4) / rw
+                        small = cv2.resize(radar, (W // 4, int(rh * scale)))
                         frame = sv.draw_image(
                             frame, small, opacity=0.5,
-                            rect=sv.Rect(x=W // 4, y=H - small.shape[0] - 10,
+                            rect=sv.Rect(x=W - small.shape[1] - 10, y=H - small.shape[0] - 10,
                                          width=small.shape[1], height=small.shape[0]),
                         )
 
-                poss = possession_by_frame[frame_index] if frame_index < len(possession_by_frame) else (50.0, 50.0)
-                _draw_stats_panel(frame, team_stats, poss, has_teams)
+                for team in (0, 1):
+                    team_stats[team]["players"] = sum(team_of.get(t.track_id) == team for t in players)
+                for event in events_by_frame[frame_index]:
+                    team = team_of.get(event.actor_track_id)
+                    field = {"pass": "passes", "touch": "touches", "shot": "shots",
+                             "shot_attempt": "shots", "goal": "shots"}.get(event.event_type)
+                    if team in (0, 1) and field:
+                        team_stats[team][field] += 1
+                poss = possession_by_frame.get(frame_index, {0: 0.5, 1: 0.5})
+                if confirmed_possession:
+                    owner_team = confirmed_possession.get(str(frame_index))
+                    if owner_team in (0, 1):
+                        held[owner_team] += 1
+                    total = sum(held.values())
+                    poss = {t: held[t] / total if total else 0 for t in (0, 1)}
+                _draw_stats_panel(frame, team_stats, poss, has_teams, show_distance=False)
                 evt = event_by_frame.get(frame_index)
                 if evt is not None:
-                    _draw_event_label(frame, evt)
+                    last_event = evt
+                if last_event is not None and frame_index - last_event.frame_index <= video.fps:
+                    _draw_event_label(frame, last_event)
 
                 writer.write(frame)
                 frame_index += 1

@@ -68,7 +68,10 @@ class _BaseModel:
 pydantic_mod = types.ModuleType('pydantic')
 pydantic_mod.BaseModel = _BaseModel
 pydantic_mod.Field = _Field
-sys.modules['pydantic'] = pydantic_mod
+try:
+    import pydantic
+except ImportError:
+    sys.modules['pydantic'] = pydantic_mod
 
 # ── Path setup ─────────────────────────────────────────────────────────────────
 ROOT = Path(__file__).parent.parent
@@ -632,7 +635,7 @@ class UTC11_ClusterArtifacts(unittest.TestCase):
             video=make_video(), tracks=[], events=[], stats=[],
             processed_video_path=Path('/tmp/out.mp4')
         )
-        self.assertEqual(str(a.processed_video_path), '/tmp/out.mp4')
+        self.assertEqual(a.processed_video_path, Path('/tmp/out.mp4'))
 
     def test_artifacts_with_tracks_events_stats(self):
         tracks = [make_obs(0, 1, 'player')]

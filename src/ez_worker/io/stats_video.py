@@ -618,6 +618,7 @@ def _draw_stats_panel(
     team_stats: dict[int, dict],
     possession: dict[int, float],
     has_teams: bool,
+    show_distance: bool = True,
 ) -> None:
     h, w = frame.shape[:2]
     panel_w = 260
@@ -667,8 +668,12 @@ def _draw_stats_panel(
     text(col_b, 3, f"Touch {b.get('touches', 0)}", (220, 220, 220))
     text(col_a, 4, f"Shot  {a.get('shots', 0)}", (220, 220, 220))
     text(col_b, 4, f"Shot  {b.get('shots', 0)}", (220, 220, 220))
-    text(col_a, 5, f"Dist  {a.get('distance_km', 0):.1f}km", (180, 180, 180))
-    text(col_b, 5, f"Dist  {b.get('distance_km', 0):.1f}km", (180, 180, 180))
+    if show_distance:
+        text(col_a, 5, f"Dist  {a.get('distance_km', 0):.1f}km", (180, 180, 180))
+        text(col_b, 5, f"Dist  {b.get('distance_km', 0):.1f}km", (180, 180, 180))
+    else:
+        text(col_a, 5, "Visible players", (180, 180, 180))
+        text(col_b, 5, "Visible players", (180, 180, 180))
 
 
 def _draw_event_label(frame: np.ndarray, event: Event) -> None:

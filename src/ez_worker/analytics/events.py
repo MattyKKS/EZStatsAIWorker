@@ -53,6 +53,8 @@ def detect_events(
     scene_changes: set[int] | None = None,
     excluded_track_ids: set[int] | None = None,
     touch_min_ball_speed_px_per_s: float = 80.0,      # raised: 30 → 80
+    possession_by_frame: dict[int, int | None] | None = None,
+    allow_aerial_contacts: bool = True,
 ) -> list[Event]:
     """
     Three-phase event detection state machine.
@@ -149,6 +151,9 @@ def detect_events(
             continue
 
         ball    = _get_ball(frame_obs, ball_track_id)
+        if ball is None or ball.is_interpolated:
+            candidate_tid = None
+            candidate_count = 0
         players = [
             o for o in frame_obs
             if o.label in ("player", "goalkeeper")
@@ -162,6 +167,14 @@ def detect_events(
             if len(vel_history) > vel_window:
                 vel_history.pop(0)
         speed = math.hypot(*vel) if vel else 0.0
+        if possession_by_frame is not None:
+            possession_by_frame[frame_index] = None
+            owner_obs = next((p for p in players if p.track_id == owner_tid), None)
+            if phase == _Phase.POSSESSED and ball is not None and not ball.is_interpolated and owner_obs is not None:
+                _, owner_distance = _closest_player(ball, [owner_obs], frame_index, video,
+                                                    use_pitch, player_pitch_pos, ball_pitch_pos)
+                if owner_distance <= poss_dist:
+                    possession_by_frame[frame_index] = owner_team
 
         # Airborne flag for this frame — used to suppress possession/reception
         # when the ball pixel is floating above player feet.  Always computed
@@ -195,7 +208,7 @@ def detect_events(
         )
         # >= 1.10: ball is above full-arm reach (no contact possible for a standing player).
         # Headers happen at hr ≈ 0.85-1.05; this threshold keeps them in the play-height zone.
-        _truly_airborne = ball_airborne and _ball_hr >= 1.10
+        _truly_airborne = ball_airborne and (not allow_aerial_contacts or _ball_hr >= 1.10)
 
         # ══════════════════════════════════════════════════════════════════
         # Phase: IN_FLIGHT
@@ -208,7 +221,7 @@ def detect_events(
             # in a ±1.2s window around the predicted landing to catch reception even
             # when the ball decelerates slowly or the closest-player flickers.
             _predicted_landing = _predict_landing_frame(
-                flight_ball_y, flight_frame or frame_index, video.fps
+                flight_ball_y, flight_frame if flight_frame is not None else frame_index, video.fps
             )
             _landing_window = int(1.2 * video.fps)
             _near_landing   = (
@@ -258,14 +271,14 @@ def detect_events(
                 # double the distance threshold — ball may still be 1-2 m away.
                 if _landing_relaxed:
                     _eff_poss_dist *= 2
-                if d <= _eff_poss_dist:
+                if d <= _eff_poss_dist and not ball.is_interpolated:
                     _fc_thresh   = 30.0 if use_pitch else 20.0
                     _flight_close = d <= _fc_thresh and not ball_airborne
 
                     if _flight_close:
-                        if speed <= flight_speed * 1.5:
-                            candidate_tid   = closest.track_id
-                            candidate_count = _eff_poss_min
+                        if speed <= flight_speed * reception_decel_fraction:
+                            candidate_count = candidate_count + 1 if candidate_tid == closest.track_id else 1
+                            candidate_tid = closest.track_id
                         else:
                             candidate_tid   = None
                             candidate_count = 0
@@ -320,9 +333,8 @@ def detect_events(
                                             _skip_dir = True
 
                                 if not _skip_dir:
-                                    # Decay rather than hard-reset: a 1–2 frame bystander blip
-                                    # shouldn't wipe out accumulated evidence for the real receiver.
-                                    candidate_count = max(1, candidate_count - 2) if candidate_count > 2 else 1
+                                    # Evidence belongs to this receiver only.
+                                    candidate_count = 1
                                     candidate_tid   = closest.track_id
                         elif not ball_decelerating:
                             candidate_tid   = None
@@ -330,7 +342,7 @@ def detect_events(
                         # else: ball_airborne — don't reset or increment
 
                     if candidate_count >= _eff_poss_min:
-                        flight_elapsed = frame_index - (flight_frame or frame_index)
+                        flight_elapsed = frame_index - (flight_frame if flight_frame is not None else frame_index)
 
                         # Gate 1: self-reception
                         if closest.track_id == owner_tid:
@@ -354,7 +366,8 @@ def detect_events(
                         # (b) owned_at_launch ≤ 4 frames: goalkeeper or quick first touch
                         # 1 frame (not 2) because the zone-exit fix can set owned_at_launch=1
                         # when a first-touch player kicks on the very next frame.
-                        owned_at_launch = (flight_frame or frame_index) - (owner_since_frame or flight_frame or frame_index)
+                        launch = flight_frame if flight_frame is not None else frame_index
+                        owned_at_launch = launch - (owner_since_frame if owner_since_frame is not None else launch)
                         _quick_kick = owner_from_flight or (owned_at_launch <= 4)
                         _min_own = max(1, int(video.fps * 0.04)) if _quick_kick else owner_min_possession_frames
                         if owned_at_launch < _min_own:
@@ -409,6 +422,8 @@ def detect_events(
                             etype = "long_ball" if closest.team_id == owner_team else "clearance"
                         else:
                             etype = "pass" if closest.team_id == owner_team else "interception"
+                        if owner_team is None or closest.team_id is None:
+                            etype = "ball_transfer"
                         speed_key = "launch_speed_cms" if use_pitch else "launch_speed_pxs"
                         events.append(Event(
                             frame_index=frame_index,
@@ -450,7 +465,7 @@ def detect_events(
                     is_high   = _is_high_arc(flight_ball_y, video.height * clearance_min_arc_frac)
                     speed_key = "launch_speed_cms" if use_pitch else "launch_speed_pxs"
 
-                    owned_at_launch = flight_frame - (owner_since_frame or flight_frame)
+                    owned_at_launch = flight_frame - (owner_since_frame if owner_since_frame is not None else flight_frame)
                     _quick_kick_t   = owner_from_flight or (owned_at_launch <= 4)
                     min_for_shot    = max(1, int(video.fps * 0.04)) if _quick_kick_t else owner_min_possession_frames
                     fire_event      = owned_at_launch >= min_for_shot
@@ -506,7 +521,7 @@ def detect_events(
         # ══════════════════════════════════════════════════════════════════
         # Phase: IDLE or POSSESSED
         # ══════════════════════════════════════════════════════════════════
-        if ball is None or not players:
+        if ball is None or ball.is_interpolated or not players:
             continue
 
         # When ball is airborne, homography projects it to a WRONG pitch position
@@ -640,7 +655,7 @@ def detect_events(
             # ground contacts skip fast-track when ball is still fast — this filters
             # out 1-frame ball→shoe tracker glitches where the ball snaps to a
             # player's foot while still moving at pass speed).
-            if ball_airborne or speed < pass_speed * 3:
+            if candidate_count >= max(2, round(video.fps * 0.08)) and (ball_airborne or speed < pass_speed * 3):
                 candidate_count = poss_min_frames
 
         if candidate_count < poss_min_frames:
@@ -716,7 +731,7 @@ def detect_events(
                     sum(math.hypot(*v) for v in vel_history) / len(vel_history)
                     if vel_history else 0.0
                 )
-                owned_frames = frame_index - (owner_since_frame or frame_index)
+                owned_frames = frame_index - (owner_since_frame if owner_since_frame is not None else frame_index)
                 _is_pingpong = (
                     closest.track_id == prev_owner_tid
                     and owned_frames < int(video.fps)
@@ -832,18 +847,20 @@ def _is_ball_airborne(
     ball_cx_px = (ball.bbox.x1 + ball.bbox.x2) / 2 * video.width
     ball_y2_px = ball.bbox.y2 * video.height
 
-    nearby: list[tuple[float, float]] = []  # (feet_y_px, player_height_px)
+    nearby: list[tuple[float, float, float]] = []
     for p in players:
         p_cx_px = (p.bbox.x1 + p.bbox.x2) / 2 * video.width
         p_h_px  = (p.bbox.y2 - p.bbox.y1) * video.height
         if p_h_px >= 15.0 and abs(p_cx_px - ball_cx_px) < p_h_px * 3:
-            nearby.append((p.bbox.y2 * video.height, p_h_px))
+            feet = p.bbox.y2 * video.height
+            distance = math.hypot(p_cx_px - ball_cx_px, feet - ball_y2_px) / p_h_px
+            nearby.append((distance, feet, p_h_px))
 
     if not nearby:
         return False
 
-    avg_feet_y   = sum(fy for fy, _ in nearby) / len(nearby)
-    avg_player_h = sum(ph for _, ph in nearby) / len(nearby)
+    # Averaging players at different depths marks ground balls as airborne.
+    _, avg_feet_y, avg_player_h = min(nearby)
 
     # In image coords: smaller y = higher in frame = higher physically.
     # Airborne if ball bottom is above avg feet by > airborne_frac * player height.
@@ -870,18 +887,19 @@ def _ball_height_ratio(
     ball_cx_px = (ball.bbox.x1 + ball.bbox.x2) / 2 * video.width
     ball_cy_px = (ball.bbox.y1 + ball.bbox.y2) / 2 * video.height
 
-    nearby: list[tuple[float, float]] = []  # (feet_y_px, player_height_px)
+    nearby: list[tuple[float, float, float]] = []
     for p in players:
         p_cx_px = (p.bbox.x1 + p.bbox.x2) / 2 * video.width
         p_h_px  = (p.bbox.y2 - p.bbox.y1) * video.height
         if p_h_px >= 15.0 and abs(p_cx_px - ball_cx_px) < p_h_px * 3:
-            nearby.append((p.bbox.y2 * video.height, p_h_px))
+            feet = p.bbox.y2 * video.height
+            distance = math.hypot(p_cx_px - ball_cx_px, feet - ball_cy_px) / p_h_px
+            nearby.append((distance, feet, p_h_px))
 
     if not nearby:
         return 0.0
 
-    avg_feet_y   = sum(fy for fy, _ in nearby) / len(nearby)
-    avg_player_h = sum(ph for _, ph in nearby) / len(nearby)
+    _, avg_feet_y, avg_player_h = min(nearby)
     if avg_player_h < 1.0:
         return 0.0
 
