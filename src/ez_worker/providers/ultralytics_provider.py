@@ -55,6 +55,7 @@ class UltralyticsTrackingProvider(TrackingProvider):
             imgsz=config.detection_imgsz,
             tracker=config.tracker_config,
             persist=True,
+            device=config.device,
             vid_stride=config.frame_step,
             verbose=False,
         )
@@ -260,6 +261,7 @@ class UltralyticsTrackingProvider(TrackingProvider):
                     imgsz=config.ball_detection_imgsz,
                     verbose=False,
                     classes=class_ids,
+                    device=config.device,
                 )
                 if results:
                     frame_tracks = self._result_to_tracks(

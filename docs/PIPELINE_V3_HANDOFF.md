@@ -9,6 +9,12 @@ events using the existing player, ball and pitch models. Run Messi first, then
 
 ## Entry points
 
+Notebook startup fix: run cells execute the logging helper with runpy inside
+the kernel, rather than inheriting notebook OS file descriptors through an
+outer subprocess.run. Setup subprocess output is explicitly streamed too.
+Cell 5 copies only the three required weights. The Colab helper prints the GPU
+name, requires CUDA, and passes --device 0 for player and ball inference.
+
 - `docs/run_on_colab_v3.ipynb`: setup, then four independent video cells.
 - `python scripts/run_colab_clip.py leo_messi_30pass.mp4`: run one clip and save
   its output/log to mounted Drive. Copies the video to runtime storage first.

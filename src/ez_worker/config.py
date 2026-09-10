@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 class PipelineConfig(BaseModel):
     provider: str = Field(default="mock")
+    device: str | None = None
     frame_step: int = Field(default=5, ge=1)
     render_video: bool = Field(default=False)
     output_root: Path = Field(default=Path("outputs"))

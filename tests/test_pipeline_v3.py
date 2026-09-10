@@ -129,3 +129,19 @@ def test_colab_cells_compile_and_have_independent_runs():
     assert len(runs) == 4
     assert "leo_messi_30pass.mp4" in runs[0]
     assert "08fd33_4.mp4" in runs[1]
+    assert all("runpy.run_path" in s and "subprocess.run" not in s for s in runs)
+
+
+def test_notebook_setup_forwards_child_output(capsys):
+    import ast
+    path = Path(__file__).resolve().parents[1] / "docs/run_on_colab_v3.ipynb"
+    notebook = json.loads(path.read_text(encoding="utf-8"))
+    source = "".join(notebook["cells"][6]["source"])
+    parsed = ast.parse(source)
+    definitions = ast.Module(body=[node for node in parsed.body
+                                   if isinstance(node, (ast.Import, ast.ImportFrom, ast.FunctionDef))],
+                             type_ignores=[])
+    namespace = {}
+    exec(compile(definitions, "colab_setup", "exec"), namespace)
+    namespace["run_checked"]([sys.executable, "-c", "print('setup progress visible')"])
+    assert "setup progress visible" in capsys.readouterr().out

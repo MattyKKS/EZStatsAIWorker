@@ -14,11 +14,15 @@ from datetime import datetime
 from pathlib import Path
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("video")
     parser.add_argument("--drive", type=Path, default=Path("/content/drive/MyDrive/ezstats"))
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    import torch
+    if not torch.cuda.is_available():
+        raise RuntimeError("No CUDA GPU available. In Colab select Runtime > Change runtime type > T4 GPU.")
+    print(f"GPU: {torch.cuda.get_device_name(0)}; starting {args.video}", flush=True)
     repo = Path(__file__).resolve().parents[1]
     source = repo / "data/raw" / args.video
     if not source.is_file():
@@ -35,7 +39,7 @@ def main():
     log = logs / f"{datetime.now():%Y%m%d_%H%M%S}_{source.stem}.log"
     messages = queue.Queue()
     proc = subprocess.Popen([sys.executable, "-u", str(repo / "run_pipeline_v3.py"),
-                             "--video", str(video)], cwd=repo, text=True,
+                             "--video", str(video), "--device", "0"], cwd=repo, text=True,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             start_new_session=os.name != "nt")
 

@@ -88,6 +88,7 @@ def main():
     parser.add_argument("--tracker-config", default="configs/botsort_football_v3.yaml", type=Path)
     parser.add_argument("--skip-video", action="store_true")
     parser.add_argument("--skip-pitch", action="store_true")
+    parser.add_argument("--device", default=None, help="0 for the first CUDA GPU; cpu for local CPU runs")
     parser.add_argument("--resume", type=Path, help="Recompute final outputs from preserved raw tracks and crops")
     args = parser.parse_args()
     os.chdir(ROOT)
@@ -115,6 +116,7 @@ def main():
         tracker_path = setup_dir / "tracker.yaml"
         tracker_path.write_text(yaml.safe_dump(tracker), encoding="utf-8")
         cfg = PipelineConfig(
+            device=args.device,
             provider="ultralytics", model_name=str(player), ball_model_name=str(ball),
             tracker_config=str(tracker_path), frame_step=1, render_video=False,
             detection_confidence=0.20, min_player_confidence=0.18, min_ball_confidence=0.15,
