@@ -114,3 +114,67 @@ Start with association/dataflow fixes. Detection confidence is not tracking
 accuracy, and high detector scores do not rule out ball or referee errors.
 Retraining should follow measured domain-specific detection errors, rather than
 being the default response to ID switches.
+
+## September 11 completed-run audit and experimental event replay
+
+Source runs (Drive originals untouched):
+- `20260910_170402`: Messi, 15 passes, 4 interceptions, no goals; 109 fragmented
+  player tracks, 4,968 direct ball observations out of 6,455 frames.
+- `20260910_173839`: 08, 2 passes, 1 interception, an erroneous early shot
+  candidate; 31 player tracks, 597 direct ball observations out of 750 frames.
+- `20260910_174331`: Brighton, 1 pass; 104 player tracks, 718 direct ball
+  observations out of 1,150 frames. The local 46-second source cuts from match
+  clock 1:04 to 11:30 near clip second 41. Do not assume continuous play.
+
+The legacy FSM can silently change possession when direct-possession emission
+is disabled. Absolute speed, reception slowdown and airborne heuristics also
+miss short exchanges. It has no goal confirmation stage: threshold tuning or
+detector retraining cannot supply that missing capability.
+
+Added opt-in `analytics/contacts.py`, `--event-engine contacts`, and
+`scripts/replay_events.py`. Contacts use real observations, player-height-scaled
+foot distances, runner-up ambiguity, relative ball/player movement, temporal
+support, concurrent-player separation and ball-coverage gates. A straight fly-by
+must not be treated as reception. Unknown/opposing team transfers are not
+automatically interceptions. Discontinuities inferred from tracking reset
+ownership; this is NOT a complete video scene-cut detector.
+
+Replays create a NEW folder with unchanged final tracks, updated consistent
+reports/video, source-track SHA256 and detailed rejection evidence. They do not
+fix wrong upstream teams or identities. The default legacy path stays intact.
+See `EVENT_REPLAY_COLAB.md` for independent Messi-first cells.
+
+Initial revised Messi result: 23 pass hypotheses and 2 uncertain ball transfers.
+08 remains at 2 pass hypotheses plus 2 uncertain transfers; Brighton has 4 pass
+hypotheses. Those figures do not establish an overall improvement on either clip.
+Sampled original frames support recovered passes near 3.8, 12.0 and 36.2 seconds.
+This is not a full annotation or a precision/recall measurement. Some legacy
+passes are now withheld; one-touch and occluded contacts remain missing. Do not
+claim 30 correct passes or 85-90% accuracy from these counts.
+
+Visual audit also found the black goalkeeper in 08 assigned the green team,
+although the visible backpass is from white. Current keeper-centroid assignment
+is not trustworthy. Messi overlap contacts near 75 and 94 seconds can select
+the opponent's feet. Fixing those requires better association evidence, not
+forcing all transfers to the attacking team. Neither defect was silently
+patched with clip-specific team labels.
+
+Automatic goals/shots/crosses/assists remain unsupported by the contact engine.
+Messi's ball is visibly in the net near 98.5 seconds, but this manual observation
+was NOT inserted as an automatically detected goal. Brighton's title alone is
+not goal ground truth. The new mode explicitly records unsupported classes.
+
+Useful next implementation references, separate from detector retraining:
+- https://github.com/SoccerNet/sn-spotting (action and ball-action spotting)
+- https://github.com/lRomul/ball-action-spotting (2023 competition solution)
+- https://github.com/SoccerNet/sn-teamspotting (team-aware spotting baseline)
+
+Next priorities: timestamped event ground truth, visual scene boundaries,
+keeper/team evidence and overlap association, then a separately validated
+goal/shot spotter. Never use the clip title or desired pass total as labels
+inside inference. Mason Mount was still running and is not covered by this audit.
+
+Verification: 141 tests pass, including fly-by rejection, camera translation,
+25/60 fps, interpolated-ball rejection, ambiguity, missing flight, scene reset,
+ID fragmentation and source-preserving replay. Two existing Windows sklearn/
+joblib warnings remain. These are software tests, not benchmark accuracy.

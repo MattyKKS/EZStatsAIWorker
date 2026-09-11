@@ -22,7 +22,7 @@ os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("LOKY_MAX_CPU_COUNT", str(os.cpu_count() or 1))
 
 
-def finish_run(run_dir: Path, *, render: bool = True) -> dict:
+def finish_run(run_dir: Path, *, render: bool = True, event_engine: str = "legacy") -> dict:
     from ez_worker.analytics.events import detect_events
     from ez_worker.analytics.stats import build_track_stats
     from ez_worker.config import DEFAULT_CONFIG
@@ -37,15 +37,23 @@ def finish_run(run_dir: Path, *, render: bool = True) -> dict:
     cfg = DEFAULT_CONFIG
     possession_frames = {}
     print("Computing events from final identities and teams...", flush=True)
-    events = detect_events(
-        tracks, video, cfg.ball_track_id,
-        ball_pitch_pos=ball_pitch, player_pitch_pos=player_pitch,
-        possession_distance_threshold_px=cfg.possession_distance_threshold_px,
-        pass_min_flight_frames=max(1, round(cfg.pass_min_flight_frames * video.fps / 25)),
-        owner_min_possession_frames=max(1, round(cfg.owner_min_possession_frames * video.fps / 25)),
-        possession_by_frame=possession_frames,
-        allow_aerial_contacts=False,
-    )
+    if event_engine not in ("legacy", "contacts"):
+        raise ValueError(f"Unknown event engine: {event_engine}")
+    evidence = None
+    if event_engine == "contacts":
+        from ez_worker.analytics.contacts import detect_contact_events
+        events, evidence, possession_frames = detect_contact_events(tracks, video)
+        (run_dir / "event_evidence.json").write_text(json.dumps(evidence, indent=2), encoding="utf-8")
+    else:
+        events = detect_events(
+            tracks, video, cfg.ball_track_id,
+            ball_pitch_pos=ball_pitch, player_pitch_pos=player_pitch,
+            possession_distance_threshold_px=cfg.possession_distance_threshold_px,
+            pass_min_flight_frames=max(1, round(cfg.pass_min_flight_frames * video.fps / 25)),
+            owner_min_possession_frames=max(1, round(cfg.owner_min_possession_frames * video.fps / 25)),
+            possession_by_frame=possession_frames,
+            allow_aerial_contacts=False,
+        )
     stats = build_track_stats(tracks, events, video)
     artifacts = AnalysisArtifacts(video=video, tracks=tracks, events=events, stats=stats)
     write_artifacts(artifacts, run_dir)
@@ -55,6 +63,8 @@ def finish_run(run_dir: Path, *, render: bool = True) -> dict:
     report["possession"] = {str(t): round(100 * held[t] / sum(held.values()), 1)
                             for t in (0, 1)} if held else {}
     report["possession_known_frames"] = sum(held.values())
+    if evidence is not None:
+        report["event_detection"] = {"experimental": True, "unsupported": evidence["unsupported_events"]}
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     (run_dir / "possession_by_frame.json").write_text(json.dumps(possession_frames), encoding="utf-8")
     shutil.copy2(run_dir / "tracks.json", run_dir / "tracks_with_teams.json")
@@ -65,10 +75,13 @@ def finish_run(run_dir: Path, *, render: bool = True) -> dict:
     players = {o.track_id for o in tracks if o.label == "player"}
     quality = {
         "video": str(video.path), "fps": video.fps,
+        "event_engine": event_engine,
+        "experimental": evidence is not None,
+        "unsupported_events": evidence["unsupported_events"] if evidence else ["goal", "cross", "assist"],
         "player_tracks": len(players), "referee_tracks": len(refs),
         "players_per_team": dict(Counter(str(decisions["teams"].get(t)) for t in players)),
         "events": dict(Counter(e.event_type for e in events)),
-        "event_coordinates": "pitch_cm" if ball_pitch is not None else "normalized_pixels",
+        "event_coordinates": "player_relative_pixels" if evidence else ("pitch_cm" if ball_pitch is not None else "normalized_pixels"),
         "ball_observations": sum(o.label == "ball" and not o.is_interpolated for o in tracks),
         "ball_interpolations": sum(o.label == "ball" and o.is_interpolated for o in tracks),
         "accuracy": None,
@@ -89,6 +102,8 @@ def main():
     parser.add_argument("--skip-video", action="store_true")
     parser.add_argument("--skip-pitch", action="store_true")
     parser.add_argument("--device", default=None, help="0 for the first CUDA GPU; cpu for local CPU runs")
+    parser.add_argument("--event-engine", choices=("legacy", "contacts"), default="legacy",
+                        help="contacts is experimental ground-pass detection, not goal detection")
     parser.add_argument("--resume", type=Path, help="Recompute final outputs from preserved raw tracks and crops")
     args = parser.parse_args()
     os.chdir(ROOT)
@@ -150,7 +165,7 @@ def main():
             "--per-frame-stride", "5"], env=env)
         if result.returncode:
             print("Pitch step failed; events will use pixel coordinates.", flush=True)
-    finish_run(run_dir, render=not args.skip_video)
+    finish_run(run_dir, render=not args.skip_video, event_engine=args.event_engine)
     print(f"PIPELINE v3 complete. Run dir: {run_dir}", flush=True)
 
 
