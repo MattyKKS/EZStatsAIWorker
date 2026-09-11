@@ -136,7 +136,8 @@ def test_notebook_setup_forwards_child_output(capsys):
     import ast
     path = Path(__file__).resolve().parents[1] / "docs/run_on_colab_v3.ipynb"
     notebook = json.loads(path.read_text(encoding="utf-8"))
-    source = "".join(notebook["cells"][6]["source"])
+    source = next("".join(c["source"]) for c in notebook["cells"]
+                  if "def run_checked(" in "".join(c["source"]))
     parsed = ast.parse(source)
     definitions = ast.Module(body=[node for node in parsed.body
                                    if isinstance(node, (ast.Import, ast.ImportFrom, ast.FunctionDef))],
@@ -145,3 +146,18 @@ def test_notebook_setup_forwards_child_output(capsys):
     exec(compile(definitions, "colab_setup", "exec"), namespace)
     namespace["run_checked"]([sys.executable, "-c", "print('setup progress visible')"])
     assert "setup progress visible" in capsys.readouterr().out
+
+
+def test_notebook_event_only_cells_skip_detection_and_rendering():
+    path = Path(__file__).resolve().parents[1] / "docs/run_on_colab_v3.ipynb"
+    notebook = json.loads(path.read_text(encoding="utf-8"))
+    code = ["".join(c["source"]) for c in notebook["cells"] if c["cell_type"] == "code"]
+    setup = next(s for s in code if "def replay_saved(" in s)
+    assert "--skip-video" in setup and "--copy-to" in setup
+    assert "run_pipeline_v3.py" not in setup
+    assert "torch" not in setup and "ultralytics" not in setup
+    runs = [s for s in code if s.startswith(("messi_events =", "benchmark_events =", "brighton_events ="))]
+    assert len(runs) == 3
+    assert "20260910_170402" in runs[0]
+    assert "20260910_173839" in runs[1]
+    assert "20260910_174331" in runs[2]

@@ -178,3 +178,29 @@ Verification: 141 tests pass, including fly-by rejection, camera translation,
 25/60 fps, interpolated-ball rejection, ambiguity, missing flight, scene reset,
 ID fragmentation and source-preserving replay. Two existing Windows sklearn/
 joblib warnings remain. These are software tests, not benchmark accuracy.
+
+## Event-only notebook workflow
+
+`docs/run_on_colab_v3.ipynb` now begins with E0-E3. E0 mounts Drive, fetches code
+and installs only Pydantic; E1/E2/E3 replay the three completed runs separately
+with `--skip-video`. Source videos, GPU, detector weights and rendering are not
+required. Each cell displays event candidates and a separate unresolved/legacy
+shot review table, and copies results into a new Drive folder. Existing full
+detection cells 1-6 are retained but should be skipped for event replay.
+
+Replay reports use null, not zero, for unsupported shot/goal/interception/touch
+totals. Possession includes observed contact coverage, not a claim of full-match
+possession. Pixel distances still include camera motion and must not be treated
+as physical running distance. No pass-completion percentage is invented when
+unsuccessful attempts have not been classified. Legacy shots are review-only,
+not relabelled as passes or retained as verified shots. This notebook change
+does not add a trained shot/goal model or raise the previously measured counts.
+
+Event semantics checked against primary references:
+- https://www.statsperform.com/opta-event-definitions/
+  Passes involve intended teammates; shots involve a goal attempt. Ball speed
+  or disappearance alone does not establish those semantics.
+- https://www.soccer-net.org/tasks/action-spotting
+- https://github.com/SoccerNet/sn-spotting
+  Action and ball-action spotting explicitly classify shots/goals separately.
+  Video-game simulation state is not a substitute for observations in footage.

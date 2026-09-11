@@ -1,5 +1,9 @@
 # Event replay, without another detection run
 
+The existing `docs/run_on_colab_v3.ipynb` now includes this workflow directly.
+Run E0, E1, E2, E3 only. Skip full-detection cells 1-6. Results are tables and JSON,
+with no rendering, source-video access or GPU. The commands below are optional.
+
 This is an experimental ground-pass revision, not a complete football event
 model. Goals, shots, crosses, assists and aerial contacts are unsupported. The
 old pipeline remains the default; compare outputs before adopting this engine.
@@ -21,6 +25,7 @@ drive = "/content/drive/MyDrive/ezstats/outputs"
 ```python
 messi_result = replay([
     "--run-dir", f"{drive}/20260910_170402",
+    "--skip-video",
     "--copy-to", drive,
 ])
 ```
@@ -30,6 +35,7 @@ messi_result = replay([
 ```python
 benchmark_result = replay([
     "--run-dir", f"{drive}/20260910_173839",
+    "--skip-video",
     "--copy-to", drive,
 ])
 ```
@@ -39,18 +45,18 @@ benchmark_result = replay([
 ```python
 brighton_result = replay([
     "--run-dir", f"{drive}/20260910_174331",
+    "--skip-video",
     "--copy-to", drive,
 ])
 ```
 
-Each cell computes events locally, renders `stats_video.mp4`, then copies a new
+Each cell computes events and reports locally, then copies a new
 `*_contacts_*` folder to Drive. Original runs are not overwritten. JSON replay
-does not need a GPU; rendering is CPU work. A T4 remains useful for full detection.
+does not need a GPU or source video. A T4 remains useful for full detection.
 
-If the runtime has restarted and the original `/content/...` video is gone,
-add `"--video", "/actual/path/to/the/source.mp4"` to that cell's argument list.
-Use the identical source clip, not a differently trimmed version. Add
-`"--skip-video"` to inspect JSON without loading any source video.
+For optional rendering later, remove `"--skip-video"` and add
+`"--video", "/actual/path/to/the/source.mp4"`. Use the identical source clip,
+not a differently trimmed version.
 
 Read `event_evidence.json` for accepted/rejected contacts and transfer reasons.
 `ball_transfer` deliberately does NOT mean confirmed interception. Missing goals

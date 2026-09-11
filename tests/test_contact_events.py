@@ -117,6 +117,28 @@ def test_replay_preserves_source_and_marks_unsupported_events(tmp_path):
     assert json.loads((destination / "tracks.json").read_text()) == json.loads(payload)
     report = json.loads((destination / "match_report.json").read_text())
     assert report["summary"]["total_passes"] == 1
+    assert report["summary"]["total_shots"] is None
+    assert report["summary"]["total_goals"] is None
+    assert 0 < report["possession_coverage_percent"] < 100
+    assert (destination / "event_timeline.csv").is_file()
+    assert (destination / "event_review.csv").is_file()
     assert "goal" in report["event_detection"]["unsupported"]
     with pytest.raises(FileExistsError):
         module.main(["--run-dir", str(source), "--output-dir", str(destination), "--skip-video"])
+
+
+def test_legacy_shot_is_review_only(tmp_path):
+    import csv
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location("replay", Path(__file__).resolve().parents[1] / "scripts/replay_events.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.write_event_tables(tmp_path, [], {"transfers": []},
+                             [{"frame_index": 25, "event_type": "shot_attempt", "actor_track_id": 1}], 25)
+    with (tmp_path / "event_timeline.csv").open() as stream:
+        assert list(csv.DictReader(stream)) == []
+    with (tmp_path / "event_review.csv").open() as stream:
+        row, = list(csv.DictReader(stream))
+    assert row["event_type"] == "shot_attempt"
+    assert row["status"] == "legacy_unverified"
