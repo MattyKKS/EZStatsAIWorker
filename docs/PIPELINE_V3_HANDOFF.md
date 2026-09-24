@@ -204,3 +204,23 @@ Event semantics checked against primary references:
 - https://github.com/SoccerNet/sn-spotting
   Action and ball-action spotting explicitly classify shots/goals separately.
   Video-game simulation state is not a substitute for observations in footage.
+
+## September 24 recovery audit
+
+See `PIPELINE_RECOVERY_PLAN.md` for the staged audit, primary references and release
+gates. First local changes add reviewed-window event evaluation, reject incompatible
+spotter class heads before feature extraction, expire stale radar keypoints and
+remove indefinite cached-radar display. 154 tests pass. The saved event checkpoint
+has an 18-class head versus the current 14-class code; historical code also warns
+of a training/inference feature mismatch. Do not enable it by guessing labels or
+changing the head size. No retraining, full-pipeline accuracy claim or Colab release
+has been made for these changes.
+
+The subsequent saved-run recovery work is detailed at the end of
+`PIPELINE_RECOVERY_PLAN.md`: opt-in contact V2, source-frame review utilities,
+small declared development references, optional partial field projection export,
+and updated event-only notebook cells. 163 tests pass. Messi has 25 pass
+candidates; 08 event predictions are unchanged from V1. Automatic goals remain
+unsolved. The new pitch export exposes poor calibration coverage rather than
+claiming a correct full-match map. Preserve the original demo and do not infer
+benchmark accuracy from these candidate counts.

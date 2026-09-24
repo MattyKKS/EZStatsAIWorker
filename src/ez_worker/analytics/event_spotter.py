@@ -67,6 +67,20 @@ FEAT_FPS  = 2.0   # features extracted at 2fps (matches BAS-2025 training)
 NUM_CLASSES = len(BALL_ACTION_CLASSES)  # 14
 
 
+def _validate_checkpoint_classes(state, model_name):
+    weight = state.get("head.2.weight") if isinstance(state, dict) else None
+    shape = getattr(weight, "shape", ())
+    if len(shape) != 2 or shape[0] != NUM_CLASSES:
+        actual = shape[0] if len(shape) == 2 else "unknown"
+        raise ValueError(
+            f"Event checkpoint {model_name} has {actual} output classes; "
+            f"this inference code expects {NUM_CLASSES}. Recover the checkpoint's "
+            "original ordered class list and training configuration before using it. "
+            "Do not resize the head or guess class labels. Retraining is not "
+            "automatically required by this compatibility error."
+        )
+
+
 def run_event_spotter(
     video_path: Path,
     video: VideoMeta,
@@ -90,6 +104,11 @@ def run_event_spotter(
         ) from exc
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    state = torch.load(str(model_name), map_location="cpu", weights_only=True)
+    _validate_checkpoint_classes(state, model_name)
+    model = _EventSpotterModel().to(device)
+    model.load_state_dict(state)
+    model.eval()
 
     # ResNet18 feature extractor (512-dim avgpool output)
     backbone = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
@@ -102,11 +121,6 @@ def run_event_spotter(
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
-
-    model = _EventSpotterModel().to(device)
-    state = torch.load(str(model_name), map_location=device, weights_only=True)
-    model.load_state_dict(state)
-    model.eval()
 
     frame_interval = max(1, int(round(video.fps / FEAT_FPS)))
     sampled_frame_indices: list[int] = list(range(0, video.frame_count, frame_interval))

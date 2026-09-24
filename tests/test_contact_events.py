@@ -1,6 +1,6 @@
 import pytest
 
-from ez_worker.analytics.contacts import detect_contact_events
+from ez_worker.analytics.contacts import ContactConfig, detect_contact_events
 from ez_worker.schemas import BBox, TrackObservation, VideoMeta
 
 
@@ -46,6 +46,54 @@ def test_straight_through_bystander_not_pass():
     tracks, video = scene(flyby=True)
     events, _, _ = detect_contact_events(tracks, video)
     assert not events
+
+
+def test_v2_still_rejects_stationary_flyby():
+    tracks, video = scene(flyby=True)
+    events, _, _ = detect_contact_events(tracks, video, config=ContactConfig(allow_dribble_follow=True))
+    assert not events
+
+
+def test_release_reacquisition_requires_real_near_owner_evidence():
+    tracks, video = scene()
+    video.frame_count = 150
+    players = [o for o in tracks if o.label == "player" and o.frame_index == 0]
+    tracks = []
+    for f in range(video.frame_count):
+        tracks.extend(p.model_copy(update={"frame_index": f}, deep=True) for p in players)
+        t = f / video.fps
+        if 1 <= t < 2.8:
+            continue
+        x = .2 if t < 1 else min(.6, .29 + max(0, t - 2.92) * .17)
+        tracks.append(TrackObservation(frame_index=f, track_id=0, label="ball",
+                      bbox=BBox(x1=x-.003, x2=x+.003, y1=.588, y2=.6)))
+    old, _, _ = detect_contact_events(tracks, video)
+    new, _, _ = detect_contact_events(tracks, video, config=ContactConfig(allow_dribble_follow=True))
+    assert not old
+    assert len(new) == 1 and new[0].details["release_reacquired"]
+    for o in tracks:
+        if o.label == "ball" and 2.8 <= o.frame_index / video.fps <= 3.0:
+            o.is_interpolated = True
+    missing, _, _ = detect_contact_events(tracks, video, config=ContactConfig(allow_dribble_follow=True))
+    assert not missing
+
+
+@pytest.mark.parametrize("fps", [25, 60])
+def test_brief_contact_followed_by_player_ball_co_motion(fps):
+    tracks, video = scene(fps=fps, flyby=True)
+    for o in tracks:
+        if o.track_id == 2:
+            shift = max(0, o.frame_index / fps - 2.35) * .4
+            o.bbox.x1 += shift
+            o.bbox.x2 += shift
+    old, _, _ = detect_contact_events(tracks, video)
+    revised, evidence, _ = detect_contact_events(tracks, video, config=ContactConfig(allow_dribble_follow=True))
+    assert not old
+    assert any(e.actor_track_id == 1 and e.target_track_id == 2 for e in revised)
+    assert evidence["method"] == "ground_contacts_v2"
+    cut, _, _ = detect_contact_events(tracks, video, config=ContactConfig(allow_dribble_follow=True),
+                                      cut_frames=[round(2.3 * fps)])
+    assert not cut
 
 
 def test_cut_does_not_join_two_possessions():

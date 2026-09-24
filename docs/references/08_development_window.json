@@ -1,0 +1,13 @@
+{
+  "annotation_status": "reviewed",
+  "video": "08fd33_4.mp4",
+  "review_method": "Assistant visual review of original timestamped source frames at 0.5 second spacing; approximate reception timestamps",
+  "scope": "Development diagnostic only; not full-clip ground truth. Black goalkeeper team error remains upstream",
+  "time_basis": "clip seconds; pass reception",
+  "event_types": ["pass", "shot_attempt", "goal"],
+  "annotated_windows": [[2.5, 10.0]],
+  "events": [
+    {"event_type": "pass", "time_seconds": 3.6, "actor_track_id": 25, "target_track_id": 6},
+    {"event_type": "pass", "time_seconds": 6.7, "actor_track_id": 6, "target_track_id": 96}
+  ]
+}

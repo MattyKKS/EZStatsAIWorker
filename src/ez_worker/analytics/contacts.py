@@ -24,6 +24,7 @@ class ContactConfig:
     controlled_speed_heights_per_second: float = 1.8
     max_transfer_seconds: float = 3.0
     min_separation_heights: float = 1.0
+    allow_dribble_follow: bool = False
 
 
 def _foot(o, video):
@@ -52,6 +53,7 @@ def detect_contact_events(tracks: list[TrackObservation], video: VideoMeta,
     cumulative = [0.0, 0.0]
     ball_path = {}
     samples = {}
+    stabilized_feet = {}
     inferred_cuts = []
     for f, observations in sorted(frames.items()):
         players = {o.track_id: o for o in observations
@@ -73,6 +75,13 @@ def detect_contact_events(tracks: list[TrackObservation], video: VideoMeta,
         if discontinuity:
             inferred_cuts.append(f)
         cumulative = [cumulative[i] + motion[i] for i in (0, 1)]
+        if cfg.allow_dribble_follow:
+            stabilized_feet[f] = {
+                t: (p.bbox.cx * video.width - cumulative[0],
+                    p.bbox.y2 * video.height - cumulative[1],
+                    (p.bbox.y2 - p.bbox.y1) * video.height)
+                for t, p in players.items()
+            }
         previous_players, previous_frame = players, f
         balls = [o for o in observations if o.label == "ball" and not o.is_interpolated]
         if len(balls) != 1:
@@ -140,7 +149,29 @@ def detect_contact_events(tracks: list[TrackObservation], video: VideoMeta,
                     cosine = sum(x * y for x, y in zip(u, v)) / (math.hypot(*u) * math.hypot(*v))
                     redirect = math.degrees(math.acos(max(-1, min(1, cosine))))
             e["redirect_degrees"] = round(redirect, 1)
-            if redirect < 35:
+            follow_frames = []
+            if cfg.allow_dribble_follow and e["closest"] <= .15:
+                origin = stabilized_feet[first][e["id"]]
+                for f in range(last + 1, min(video.frame_count, last + round(video.fps * .6) + 1)):
+                    if any(first < cut <= f for cut in inferred_cuts):
+                        break
+                    p = stabilized_feet.get(f, {}).get(e["id"])
+                    b = ball_path.get(f)
+                    if p is None or b is None:
+                        continue
+                    h = max(origin[2], p[2], 10)
+                    movement = (p[0] - origin[0], p[1] - origin[1])
+                    travel = (b[0] - ball_path[first][0], b[1] - ball_path[first][1])
+                    lengths = math.hypot(*movement), math.hypot(*travel)
+                    if min(lengths) < .4 * h or math.dist(p[:2], b) > 1.5 * h:
+                        continue
+                    cosine = sum(a * b for a, b in zip(movement, travel)) / (lengths[0] * lengths[1])
+                    if cosine >= .85:
+                        follow_frames.append(f)
+            followed = (len(follow_frames) >= minimum and
+                        follow_frames[-1] - follow_frames[0] >= video.fps * .12)
+            e["dribble_follow_frames"] = len(follow_frames)
+            if redirect < 35 and not followed:
                 reason = "brief_contact_without_redirect"
         if reason:
             rejected.append(dict(e, reason=reason))
@@ -158,7 +189,29 @@ def detect_contact_events(tracks: list[TrackObservation], video: VideoMeta,
             continue
         if owner:
             reason = None
-            gap = (e["start"] - owner["end"]) / video.fps
+            departure = owner["end"]
+            gap = (e["start"] - departure) / video.fps
+            if cfg.allow_dribble_follow and not cut and gap > cfg.max_transfer_seconds:
+                # A detector dropout during a dribble is not flight time. Require
+                # multiple real observations near the established owner before
+                # moving the departure bound forward; never bridge by prediction.
+                reacquired = []
+                for f in range(departure + 1, min(e["start"], departure + round(video.fps * 2) + 1)):
+                    b = ball_path.get(f)
+                    visible = stabilized_feet.get(f, {})
+                    p = visible.get(owner["id"])
+                    if b is None or p is None or p[2] < 10:
+                        continue
+                    distance = math.dist(p[:2], b) / p[2]
+                    other_distance = min((math.dist(q[:2], b) / max(q[2], 10)
+                                          for tid, q in visible.items() if tid != owner["id"]), default=100)
+                    if distance <= 1.0 and other_distance - distance > cfg.ambiguity_margin:
+                        if reacquired and f - reacquired[-1] > video.fps * cfg.max_contact_gap_seconds:
+                            reacquired = []
+                        reacquired.append(f)
+                if len(reacquired) >= max(2, round(video.fps * .05)):
+                    departure = reacquired[-1]
+                    gap = (e["start"] - departure) / video.fps
             if cut:
                 reason = "scene_or_tracking_discontinuity"
             elif gap > cfg.max_transfer_seconds:
@@ -173,12 +226,13 @@ def detect_contact_events(tracks: list[TrackObservation], video: VideoMeta,
                     separations.append(math.dist(p, q) / h)
             if reason is None and (not separations or max(separations) < cfg.min_separation_heights):
                 reason = "identity_or_close_challenge_ambiguous"
-            observed = sum(f in ball_path for f in range(owner["end"], e["start"] + 1))
-            coverage = observed / max(1, e["start"] - owner["end"] + 1)
+            observed = sum(f in ball_path for f in range(departure, e["start"] + 1))
+            coverage = observed / max(1, e["start"] - departure + 1)
             if reason is None and coverage < .5:
                 reason = "insufficient_ball_coverage"
             evidence = dict(actor=owner["id"], target=e["id"],
-                            departure_frame=owner["end"], reception_frame=e["start"],
+                            departure_frame=departure, last_confirmed_contact_frame=owner["end"],
+                            release_reacquired=departure != owner["end"], reception_frame=e["start"],
                             ball_coverage=round(coverage, 3), reason=reason)
             transfers.append(evidence)
             if reason is None:
@@ -187,10 +241,10 @@ def detect_contact_events(tracks: list[TrackObservation], video: VideoMeta,
                 kind = "pass" if e["team"] is not None and e["team"] == owner["team"] else "ball_transfer"
                 events.append(Event(frame_index=e["start"], time_seconds=round(e["start"] / video.fps, 3),
                                     event_type=kind, actor_track_id=owner["id"], target_track_id=e["id"],
-                                    details=dict(evidence, method="ground_contacts_v1",
+                                    details=dict(evidence, method="ground_contacts_v2" if cfg.allow_dribble_follow else "ground_contacts_v1",
                                                  review_required=kind != "pass")))
         owner = e
-    return events, dict(method="ground_contacts_v1", experimental=True,
+    return events, dict(method="ground_contacts_v2" if cfg.allow_dribble_follow else "ground_contacts_v1", experimental=True,
                         config=asdict(cfg), cut_frames=inferred_cuts,
                         contacts=accepted, rejected_contacts=rejected, transfers=transfers,
                         unsupported_events=["goal", "shot", "cross", "assist", "aerial_contact"],

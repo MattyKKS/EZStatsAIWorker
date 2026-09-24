@@ -1,0 +1,17 @@
+{
+  "annotation_status": "reviewed",
+  "video": "leo_messi_30pass.mp4",
+  "review_method": "Assistant visual review of original timestamped source frames, 0.25-0.5 second spacing; approximate timestamps",
+  "scope": "Small development diagnostic only, not independent held-out ground truth or full-clip accuracy",
+  "time_basis": "clip seconds; pass reception; shot strike; approximate goal crossing",
+  "event_types": ["pass", "shot_attempt", "goal"],
+  "annotated_windows": [[45.0, 51.0], [91.0, 99.0]],
+  "events": [
+    {"event_type": "pass", "time_seconds": 45.3, "actor_track_id": 462, "target_track_id": 476},
+    {"event_type": "pass", "time_seconds": 49.4, "actor_track_id": 476, "target_track_id": 462},
+    {"event_type": "pass", "time_seconds": 91.8, "actor_track_id": 1026, "target_track_id": 1190},
+    {"event_type": "pass", "time_seconds": 92.65, "actor_track_id": 1190, "target_track_id": 1252},
+    {"event_type": "shot_attempt", "time_seconds": 94.9},
+    {"event_type": "goal", "time_seconds": 95.3}
+  ]
+}

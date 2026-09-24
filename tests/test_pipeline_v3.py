@@ -154,6 +154,7 @@ def test_notebook_event_only_cells_skip_detection_and_rendering():
     code = ["".join(c["source"]) for c in notebook["cells"] if c["cell_type"] == "code"]
     setup = next(s for s in code if "def replay_saved(" in s)
     assert "--skip-video" in setup and "--copy-to" in setup
+    assert "--event-engine" in setup and "contacts_v2" in setup
     assert "run_pipeline_v3.py" not in setup
     assert "torch" not in setup and "ultralytics" not in setup
     runs = [s for s in code if s.startswith(("messi_events =", "benchmark_events =", "brighton_events ="))]

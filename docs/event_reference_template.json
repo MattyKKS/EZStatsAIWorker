@@ -1,0 +1,8 @@
+{
+  "annotation_status": "draft",
+  "video": "REPLACE_WITH_EXACT_SOURCE_VIDEO",
+  "time_basis": "original_clip_seconds; pass_reception",
+  "annotated_windows": [],
+  "events": [],
+  "instructions": "Populate fully reviewed [start,end) windows and event_type/time_seconds entries. Optional actor_track_id/target_track_id must use the frozen run's IDs. Change status to reviewed only after annotation is complete. This empty template is not ground truth."
+}

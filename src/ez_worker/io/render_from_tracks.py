@@ -106,6 +106,8 @@ def _keypoints_for_frame(per_frame: dict, frame_index: int, wh) -> Optional[sv.K
             hi = mid
     cands = {keys[max(0, lo - 1)], keys[lo]}
     best = min(cands, key=lambda k: abs(k - frame_index))
+    if abs(best - frame_index) > max(1, int(per_frame.get("stride", 10))) * 3:
+        return None
     kps = frames[str(best)].get("keypoints") or {}
     if len(kps) < 4:
         return None
@@ -190,7 +192,6 @@ def render_from_tracks(
     if not writer.isOpened():
         raise RuntimeError(f"Unable to open video writer: {out_path}")
     ball_trail = _SavedBallAnnotator() if show_ball_trail else None
-    last_radar: Optional[np.ndarray] = None
 
     cap = cv2.VideoCapture(str(video_path))
     frame_index = 0
@@ -258,10 +259,6 @@ def render_from_tracks(
                                                  ball_xy[0] if ball_xy is not None else None)
                         except Exception:
                             radar = None
-                    if radar is None:
-                        radar = last_radar
-                    else:
-                        last_radar = radar
                     if radar is not None:
                         rh, rw = radar.shape[:2]
                         scale = (W // 4) / rw

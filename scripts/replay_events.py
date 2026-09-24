@@ -42,10 +42,12 @@ def main(argv=None):
     parser.add_argument("--video", type=Path, help="Override original source path for this machine")
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--skip-video", action="store_true")
+    parser.add_argument("--event-engine", choices=("contacts_v1", "contacts_v2"), default="contacts_v1")
+    parser.add_argument("--export-pitch", action="store_true", help="Export quality-gated field positions from saved landmarks; needs OpenCV and sports")
     parser.add_argument("--copy-to", type=Path, help="Copy completed result into this Drive directory")
     args = parser.parse_args(argv)
     print("Event replay starting; no GPU inference or model loading.", flush=True)
-    from ez_worker.analytics.contacts import detect_contact_events
+    from ez_worker.analytics.contacts import ContactConfig, detect_contact_events
     from ez_worker.analytics.stats import build_track_stats
     from ez_worker.outputs.writer import write_artifacts
     from ez_worker.schemas import AnalysisArtifacts, TrackObservation, VideoMeta
@@ -62,7 +64,17 @@ def main(argv=None):
                    (source.name + "_contacts_" + datetime.now().strftime("%Y%m%d_%H%M%S_%f"))).resolve()
     destination.mkdir(parents=True, exist_ok=False)
     print(f"Read {len(tracks)} observations. Computing contact evidence...", flush=True)
-    events, evidence, possession = detect_contact_events(tracks, video)
+    events, evidence, possession = detect_contact_events(
+        tracks, video, config=ContactConfig(allow_dribble_follow=args.event_engine == "contacts_v2"))
+    if args.export_pitch:
+        from sports.configs.soccer import SoccerPitchConfiguration
+        from ez_worker.spatial.field_positions import export_field_positions
+        print("Projecting saved pitch landmarks; no pitch-model inference...", flush=True)
+        pitch = json.loads((source / "pitch_keypoints_per_frame.json").read_text(encoding="utf-8"))
+        positions = export_field_positions(tracks, video, pitch, SoccerPitchConfiguration().vertices,
+                                           cut_frames=evidence["cut_frames"])
+        (destination / "field_positions.json").write_text(json.dumps(positions, indent=2, allow_nan=False), encoding="utf-8")
+        print(f"Field projection coverage (players): {positions['player_projection_coverage']}", flush=True)
     write_artifacts(AnalysisArtifacts(video=video, tracks=tracks, events=events,
                     stats=build_track_stats(tracks, events, video)), destination)
     held = Counter(t for t in possession.values() if t is not None)
@@ -94,7 +106,7 @@ def main(argv=None):
     counts = dict(Counter(e.event_type for e in events))
     old = json.loads((source / "events.json").read_text(encoding="utf-8")) if (source / "events.json").exists() else []
     write_event_tables(destination, events, evidence, old, video.fps)
-    quality = dict(event_engine="ground_contacts_v1", experimental=True,
+    quality = dict(event_engine=evidence["method"], experimental=True,
                    event_code_sha256=hashlib.sha256((ROOT / "src/ez_worker/analytics/contacts.py").read_bytes()).hexdigest(),
                    source_run=str(source), source_tracks_sha256=hashlib.sha256(payload).hexdigest(),
                    original_events=dict(Counter(e["event_type"] for e in old)), events=counts,
