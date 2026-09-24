@@ -1,0 +1,34 @@
+{
+  "annotation_status": "reviewed",
+  "video": "08fd33_4.mp4",
+  "review_method": "Project owner watched the clip and listed the ball sequence with timestamps, then separately described how Pipelines A, B and C each labelled the SAME sequence. The three pipelines disagree only on track ids, not on what happened, so the event sequence is the reference and ids are treated as run-specific.",
+  "scope": "Complete annotation of 0-30s for this clip. One clip, one annotator, timestamps read to the nearest second, hence the 1.5s tolerance.",
+  "time_basis": "clip seconds; pass time = RECEPTION, matching what the contact engine emits; a keeper kick is timed at the kick",
+  "event_types": ["pass", "interception", "touch", "clearance"],
+  "annotated_windows": [[0.0, 30.0]],
+  "id_spaces": {
+    "note": "Same ten real events under three runs. Useful for checking identity, useless as event labels.",
+    "pipeline_A": "TA10 -> TA2 -> TA keeper 209 (kick) -> TB9 touch -> TA12 touch -> TB9 -> TB keeper 846 -> TB6 -> TB537 -> intercepted by TA1 -> TB5",
+    "pipeline_B": "TA25 -> TA6 -> TA keeper 171 (kick) -> TB8 touch -> TA11 touch -> TB8 -> TB keeper 442 -> TB5 -> (TB player shown as TA16) -> TA12 -> TB2",
+    "pipeline_C": "identical to pipeline_B",
+    "known_defect": "In B and C the receiver at ~26s is a TB player but is coloured TA16. That is the confirmed #3<->#16 team/ID error, not a different sequence."
+  },
+  "notes": [
+    "Five of these ten events send the ball INTO THE AIR (t=11 keeper kick, t=14 knee-high touch, t=16 kick to air, t=22 keeper kick, t=27 kick to air). contacts_v2 disables aerial contacts by design, so this clip is much harder for it than Messi, where only one pass was aerial.",
+    "t=24 is the reception of the keeper kick launched at t=22, annotated once at the reception.",
+    "t=28 is the interception of the ball kicked at t=27, annotated once at the interception.",
+    "Balls are received at the feet, so reception is judged at the foot position."
+  ],
+  "events": [
+    {"event_type": "pass", "time_seconds": 3.0},
+    {"event_type": "pass", "time_seconds": 7.0},
+    {"event_type": "clearance", "time_seconds": 11.0},
+    {"event_type": "touch", "time_seconds": 14.0},
+    {"event_type": "touch", "time_seconds": 16.0},
+    {"event_type": "pass", "time_seconds": 20.0},
+    {"event_type": "pass", "time_seconds": 24.0},
+    {"event_type": "pass", "time_seconds": 26.0},
+    {"event_type": "interception", "time_seconds": 28.0},
+    {"event_type": "touch", "time_seconds": 29.0}
+  ]
+}
