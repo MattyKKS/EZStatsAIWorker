@@ -1,0 +1,407 @@
+{
+  "source_run": "G:\\My Drive\\ezstats\\outputs\\20260910_170402",
+  "window_seconds": [
+    60.0,
+    100.0
+  ],
+  "frames_sampled": 197,
+  "frames_calibrated": 157,
+  "calibration_coverage_percent": 79.7,
+  "units": "metres; speed in m/s and km/h",
+  "players": [
+    {
+      "track_id": 992,
+      "team_id": 0,
+      "distance_m": 46.3,
+      "top_speed_ms": 6.43,
+      "top_speed_kmh": 23.1,
+      "track_seconds": 20.1,
+      "samples": 85
+    },
+    {
+      "track_id": 962,
+      "team_id": 0,
+      "distance_m": 45.4,
+      "top_speed_ms": 9.63,
+      "top_speed_kmh": 34.7,
+      "track_seconds": 13.3,
+      "samples": 57
+    },
+    {
+      "track_id": 1026,
+      "team_id": 1,
+      "distance_m": 43.3,
+      "top_speed_ms": 8.89,
+      "top_speed_kmh": 32.0,
+      "track_seconds": 18.9,
+      "samples": 74
+    },
+    {
+      "track_id": 592,
+      "team_id": 1,
+      "distance_m": 42.0,
+      "top_speed_ms": 6.67,
+      "top_speed_kmh": 24.0,
+      "track_seconds": 9.4,
+      "samples": 46
+    },
+    {
+      "track_id": 1190,
+      "team_id": 1,
+      "distance_m": 37.6,
+      "top_speed_ms": 6.72,
+      "top_speed_kmh": 24.2,
+      "track_seconds": 10.0,
+      "samples": 40
+    },
+    {
+      "track_id": 1015,
+      "team_id": 1,
+      "distance_m": 37.4,
+      "top_speed_ms": 9.18,
+      "top_speed_kmh": 33.1,
+      "track_seconds": 10.5,
+      "samples": 48
+    },
+    {
+      "track_id": 676,
+      "team_id": 0,
+      "distance_m": 36.5,
+      "top_speed_ms": 4.94,
+      "top_speed_kmh": 17.8,
+      "track_seconds": 12.7,
+      "samples": 62
+    },
+    {
+      "track_id": 854,
+      "team_id": 0,
+      "distance_m": 35.4,
+      "top_speed_ms": 5.87,
+      "top_speed_kmh": 21.1,
+      "track_seconds": 12.1,
+      "samples": 58
+    },
+    {
+      "track_id": 589,
+      "team_id": 0,
+      "distance_m": 32.0,
+      "top_speed_ms": 6.52,
+      "top_speed_kmh": 23.5,
+      "track_seconds": 10.7,
+      "samples": 53
+    },
+    {
+      "track_id": 1027,
+      "team_id": 0,
+      "distance_m": 31.7,
+      "top_speed_ms": 9.81,
+      "top_speed_kmh": 35.3,
+      "track_seconds": 9.8,
+      "samples": 42
+    },
+    {
+      "track_id": 1187,
+      "team_id": 0,
+      "distance_m": 31.4,
+      "top_speed_ms": 7.25,
+      "top_speed_kmh": 26.1,
+      "track_seconds": 10.2,
+      "samples": 45
+    },
+    {
+      "track_id": 749,
+      "team_id": 1,
+      "distance_m": 29.0,
+      "top_speed_ms": 6.55,
+      "top_speed_kmh": 23.6,
+      "track_seconds": 11.5,
+      "samples": 58
+    },
+    {
+      "track_id": 897,
+      "team_id": 0,
+      "distance_m": 28.0,
+      "top_speed_ms": 6.32,
+      "top_speed_kmh": 22.7,
+      "track_seconds": 9.8,
+      "samples": 50
+    },
+    {
+      "track_id": 1094,
+      "team_id": 0,
+      "distance_m": 25.8,
+      "top_speed_ms": 4.55,
+      "top_speed_kmh": 16.4,
+      "track_seconds": 10.7,
+      "samples": 35
+    },
+    {
+      "track_id": 967,
+      "team_id": 1,
+      "distance_m": 25.7,
+      "top_speed_ms": 7.24,
+      "top_speed_kmh": 26.1,
+      "track_seconds": 4.6,
+      "samples": 23
+    },
+    {
+      "track_id": 922,
+      "team_id": 1,
+      "distance_m": 25.1,
+      "top_speed_ms": 8.54,
+      "top_speed_kmh": 30.7,
+      "track_seconds": 10.2,
+      "samples": 50
+    },
+    {
+      "track_id": 1252,
+      "team_id": 1,
+      "distance_m": 24.4,
+      "top_speed_ms": 9.22,
+      "top_speed_kmh": 33.2,
+      "track_seconds": 6.4,
+      "samples": 32
+    },
+    {
+      "track_id": 751,
+      "team_id": 0,
+      "distance_m": 24.3,
+      "top_speed_ms": 7.85,
+      "top_speed_kmh": 28.3,
+      "track_seconds": 10.9,
+      "samples": 55
+    },
+    {
+      "track_id": 1251,
+      "team_id": 0,
+      "distance_m": 24.2,
+      "top_speed_ms": 9.21,
+      "top_speed_kmh": 33.2,
+      "track_seconds": 6.4,
+      "samples": 32
+    },
+    {
+      "track_id": 977,
+      "team_id": 0,
+      "distance_m": 22.2,
+      "top_speed_ms": 3.59,
+      "top_speed_kmh": 12.9,
+      "track_seconds": 8.4,
+      "samples": 41
+    },
+    {
+      "track_id": 1230,
+      "team_id": 0,
+      "distance_m": 21.8,
+      "top_speed_ms": 7.07,
+      "top_speed_kmh": 25.5,
+      "track_seconds": 6.8,
+      "samples": 29
+    },
+    {
+      "track_id": 1055,
+      "team_id": 1,
+      "distance_m": 21.2,
+      "top_speed_ms": 9.5,
+      "top_speed_kmh": 34.2,
+      "track_seconds": 8.2,
+      "samples": 40
+    },
+    {
+      "track_id": 1037,
+      "team_id": 1,
+      "distance_m": 20.5,
+      "top_speed_ms": 8.42,
+      "top_speed_kmh": 30.3,
+      "track_seconds": 8.4,
+      "samples": 41
+    },
+    {
+      "track_id": 1033,
+      "team_id": 0,
+      "distance_m": 19.9,
+      "top_speed_ms": 9.17,
+      "top_speed_kmh": 33.0,
+      "track_seconds": 13.5,
+      "samples": 50
+    },
+    {
+      "track_id": 1253,
+      "team_id": 0,
+      "distance_m": 19.7,
+      "top_speed_ms": 8.55,
+      "top_speed_kmh": 30.8,
+      "track_seconds": 4.0,
+      "samples": 21
+    },
+    {
+      "track_id": 1282,
+      "team_id": 0,
+      "distance_m": 16.0,
+      "top_speed_ms": 9.08,
+      "top_speed_kmh": 32.7,
+      "track_seconds": 3.0,
+      "samples": 16
+    },
+    {
+      "track_id": 1224,
+      "team_id": 1,
+      "distance_m": 14.7,
+      "top_speed_ms": 7.66,
+      "top_speed_kmh": 27.6,
+      "track_seconds": 4.6,
+      "samples": 18
+    },
+    {
+      "track_id": 1012,
+      "team_id": 1,
+      "distance_m": 13.8,
+      "top_speed_ms": 5.04,
+      "top_speed_kmh": 18.1,
+      "track_seconds": 5.4,
+      "samples": 26
+    },
+    {
+      "track_id": 1158,
+      "team_id": 0,
+      "distance_m": 12.2,
+      "top_speed_ms": 6.26,
+      "top_speed_kmh": 22.5,
+      "track_seconds": 7.0,
+      "samples": 29
+    },
+    {
+      "track_id": 1164,
+      "team_id": 1,
+      "distance_m": 12.2,
+      "top_speed_ms": 4.44,
+      "top_speed_kmh": 16.0,
+      "track_seconds": 4.6,
+      "samples": 24
+    },
+    {
+      "track_id": 983,
+      "team_id": 1,
+      "distance_m": 11.6,
+      "top_speed_ms": 3.54,
+      "top_speed_kmh": 12.7,
+      "track_seconds": 5.8,
+      "samples": 27
+    },
+    {
+      "track_id": 1011,
+      "team_id": 0,
+      "distance_m": 11.6,
+      "top_speed_ms": 4.5,
+      "top_speed_kmh": 16.2,
+      "track_seconds": 4.8,
+      "samples": 23
+    },
+    {
+      "track_id": 1138,
+      "team_id": 1,
+      "distance_m": 11.0,
+      "top_speed_ms": 4.62,
+      "top_speed_kmh": 16.6,
+      "track_seconds": 3.4,
+      "samples": 18
+    },
+    {
+      "track_id": 940,
+      "team_id": 1,
+      "distance_m": 9.0,
+      "top_speed_ms": 1.19,
+      "top_speed_kmh": 4.3,
+      "track_seconds": 9.0,
+      "samples": 46
+    },
+    {
+      "track_id": 1196,
+      "team_id": 0,
+      "distance_m": 9.0,
+      "top_speed_ms": 6.04,
+      "top_speed_kmh": 21.7,
+      "track_seconds": 4.0,
+      "samples": 14
+    },
+    {
+      "track_id": 1159,
+      "team_id": 1,
+      "distance_m": 8.4,
+      "top_speed_ms": 2.73,
+      "top_speed_kmh": 9.8,
+      "track_seconds": 3.8,
+      "samples": 20
+    },
+    {
+      "track_id": 1081,
+      "team_id": 0,
+      "distance_m": 6.6,
+      "top_speed_ms": 2.91,
+      "top_speed_kmh": 10.5,
+      "track_seconds": 3.4,
+      "samples": 16
+    },
+    {
+      "track_id": 1095,
+      "team_id": 1,
+      "distance_m": 5.7,
+      "top_speed_ms": 1.79,
+      "top_speed_kmh": 6.4,
+      "track_seconds": 4.6,
+      "samples": 11
+    },
+    {
+      "track_id": 1198,
+      "team_id": 1,
+      "distance_m": 5.5,
+      "top_speed_ms": 3.72,
+      "top_speed_kmh": 13.4,
+      "track_seconds": 3.4,
+      "samples": 12
+    },
+    {
+      "track_id": 1344,
+      "team_id": 0,
+      "distance_m": 3.6,
+      "top_speed_ms": 1.86,
+      "top_speed_kmh": 6.7,
+      "track_seconds": 3.4,
+      "samples": 12
+    },
+    {
+      "track_id": 1086,
+      "team_id": 0,
+      "distance_m": 3.5,
+      "top_speed_ms": 3.42,
+      "top_speed_kmh": 12.3,
+      "track_seconds": 5.0,
+      "samples": 13
+    },
+    {
+      "track_id": 1089,
+      "team_id": 1,
+      "distance_m": 2.5,
+      "top_speed_ms": 1.53,
+      "top_speed_kmh": 5.5,
+      "track_seconds": 5.0,
+      "samples": 13
+    },
+    {
+      "track_id": 1096,
+      "team_id": 1,
+      "distance_m": 1.3,
+      "top_speed_ms": null,
+      "top_speed_kmh": null,
+      "track_seconds": 3.2,
+      "samples": 4
+    }
+  ],
+  "caveats": [
+    "Distance is PER TRACK, not per player: a fragmented identity appears as several short runners. Check track_seconds before comparing players.",
+    "Only calibrated frames contribute, so distance UNDERCOUNTS whenever coverage is below 100% (here 79.7%). Values are not scaled up.",
+    "140 displacement(s) implying more than 10.0 m/s were dropped as tracking or calibration jitter.",
+    "Top speed is a straight-line average over a 1.0s window, not a single sample. Single-sample speed is meaningless at this sampling rate: two metres of positional noise over 0.2s alone reads as 36 km/h. Averaging also UNDER-reports a genuine curved sprint.",
+    "Positions are sampled every 12 frames, so distance along a curved run is slightly under-measured."
+  ]
+}

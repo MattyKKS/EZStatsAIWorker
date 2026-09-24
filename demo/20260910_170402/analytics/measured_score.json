@@ -1,0 +1,178 @@
+{
+  "overall": {
+    "tp": 24,
+    "fp": 2,
+    "fn": 5,
+    "precision": 0.9230769230769231,
+    "recall": 0.8275862068965517,
+    "f1": 0.8727272727272727
+  },
+  "per_class": {
+    "goal": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    "pass": {
+      "tp": 23,
+      "fp": 2,
+      "fn": 4,
+      "precision": 0.92,
+      "recall": 0.8518518518518519,
+      "f1": 0.8846153846153846
+    },
+    "shot_attempt": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "precision": null,
+      "recall": 0.0,
+      "f1": 0.0
+    }
+  },
+  "matches": [
+    {
+      "prediction_index": 0,
+      "reference_index": 1,
+      "timing_error_seconds": 0.21499999999999986
+    },
+    {
+      "prediction_index": 1,
+      "reference_index": 2,
+      "timing_error_seconds": 0.5819999999999999
+    },
+    {
+      "prediction_index": 2,
+      "reference_index": 3,
+      "timing_error_seconds": 0.6969999999999992
+    },
+    {
+      "prediction_index": 3,
+      "reference_index": 4,
+      "timing_error_seconds": 0.007999999999999119
+    },
+    {
+      "prediction_index": 4,
+      "reference_index": 5,
+      "timing_error_seconds": 1.0060000000000002
+    },
+    {
+      "prediction_index": 5,
+      "reference_index": 6,
+      "timing_error_seconds": 0.0710000000000015
+    },
+    {
+      "prediction_index": 6,
+      "reference_index": 7,
+      "timing_error_seconds": 0.3990000000000009
+    },
+    {
+      "prediction_index": 8,
+      "reference_index": 8,
+      "timing_error_seconds": 1.3829999999999991
+    },
+    {
+      "prediction_index": 10,
+      "reference_index": 9,
+      "timing_error_seconds": 0.16199999999999903
+    },
+    {
+      "prediction_index": 11,
+      "reference_index": 10,
+      "timing_error_seconds": 0.24199999999999733
+    },
+    {
+      "prediction_index": 12,
+      "reference_index": 11,
+      "timing_error_seconds": 0.3960000000000008
+    },
+    {
+      "prediction_index": 13,
+      "reference_index": 12,
+      "timing_error_seconds": 0.2530000000000001
+    },
+    {
+      "prediction_index": 14,
+      "reference_index": 13,
+      "timing_error_seconds": 0.4059999999999988
+    },
+    {
+      "prediction_index": 15,
+      "reference_index": 14,
+      "timing_error_seconds": 0.22699999999999676
+    },
+    {
+      "prediction_index": 16,
+      "reference_index": 15,
+      "timing_error_seconds": 0.5360000000000014
+    },
+    {
+      "prediction_index": 17,
+      "reference_index": 16,
+      "timing_error_seconds": 0.08200000000000074
+    },
+    {
+      "prediction_index": 18,
+      "reference_index": 17,
+      "timing_error_seconds": 0.4099999999999966
+    },
+    {
+      "prediction_index": 20,
+      "reference_index": 21,
+      "timing_error_seconds": 0.7819999999999965
+    },
+    {
+      "prediction_index": 21,
+      "reference_index": 22,
+      "timing_error_seconds": 0.20999999999999375
+    },
+    {
+      "prediction_index": 22,
+      "reference_index": 23,
+      "timing_error_seconds": 0.16200000000000614
+    },
+    {
+      "prediction_index": 23,
+      "reference_index": 24,
+      "timing_error_seconds": 0.9650000000000034
+    },
+    {
+      "prediction_index": 24,
+      "reference_index": 25,
+      "timing_error_seconds": 0.8619999999999948
+    },
+    {
+      "prediction_index": 25,
+      "reference_index": 26,
+      "timing_error_seconds": 1.350999999999999
+    },
+    {
+      "prediction_index": 27,
+      "reference_index": 28,
+      "timing_error_seconds": 0.0
+    }
+  ],
+  "false_positive_indices": [
+    7,
+    9
+  ],
+  "missed_reference_indices": [
+    0,
+    18,
+    19,
+    20,
+    27
+  ],
+  "ignored_prediction_count": 3,
+  "tolerance_seconds": 1.5,
+  "match_actors": false,
+  "event_types": [
+    "pass",
+    "shot_attempt",
+    "goal"
+  ],
+  "note": "Scores apply only to reviewed windows, not the entire clip or all football accuracy"
+}

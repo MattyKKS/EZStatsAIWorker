@@ -1,0 +1,1981 @@
+{
+  "match_id": "20260910_170402_contacts_20260924_173049_065393",
+  "video": "leo_messi_30pass.mp4",
+  "duration_s": 108.1,
+  "fps": 59.709,
+  "possession": {
+    "1": 97.3,
+    "0": 2.7
+  },
+  "players": [
+    {
+      "track_id": 1,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 284.2
+    },
+    {
+      "track_id": 2,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 344.8
+    },
+    {
+      "track_id": 3,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 7592.0
+    },
+    {
+      "track_id": 4,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 9287.6
+    },
+    {
+      "track_id": 5,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 8204.5
+    },
+    {
+      "track_id": 6,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 3617.8
+    },
+    {
+      "track_id": 7,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 1411.8
+    },
+    {
+      "track_id": 8,
+      "team_id": 1,
+      "touches": null,
+      "passes": 1,
+      "shots": null,
+      "distance_px": 2865.7
+    },
+    {
+      "track_id": 9,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 596.0
+    },
+    {
+      "track_id": 10,
+      "team_id": 1,
+      "touches": null,
+      "passes": 1,
+      "shots": null,
+      "distance_px": 7540.6
+    },
+    {
+      "track_id": 11,
+      "team_id": 1,
+      "touches": null,
+      "passes": 3,
+      "shots": null,
+      "distance_px": 5702.5
+    },
+    {
+      "track_id": 12,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 4875.8
+    },
+    {
+      "track_id": 13,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 5116.1
+    },
+    {
+      "track_id": 33,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 1493.9
+    },
+    {
+      "track_id": 51,
+      "team_id": 1,
+      "touches": null,
+      "passes": 1,
+      "shots": null,
+      "distance_px": 1999.6
+    },
+    {
+      "track_id": 55,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 1632.2
+    },
+    {
+      "track_id": 57,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 770.9
+    },
+    {
+      "track_id": 61,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 1669.5
+    },
+    {
+      "track_id": 117,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 452.8
+    },
+    {
+      "track_id": 118,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 468.4
+    },
+    {
+      "track_id": 189,
+      "team_id": 1,
+      "touches": null,
+      "passes": 2,
+      "shots": null,
+      "distance_px": 2130.9
+    },
+    {
+      "track_id": 192,
+      "team_id": 1,
+      "touches": null,
+      "passes": 1,
+      "shots": null,
+      "distance_px": 2070.2
+    },
+    {
+      "track_id": 239,
+      "team_id": 1,
+      "touches": null,
+      "passes": 2,
+      "shots": null,
+      "distance_px": 1572.3
+    },
+    {
+      "track_id": 250,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 3045.4
+    },
+    {
+      "track_id": 309,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 3771.4
+    },
+    {
+      "track_id": 348,
+      "team_id": 1,
+      "touches": null,
+      "passes": 1,
+      "shots": null,
+      "distance_px": 1941.3
+    },
+    {
+      "track_id": 353,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 464.3
+    },
+    {
+      "track_id": 359,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 792.2
+    },
+    {
+      "track_id": 362,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 1311.3
+    },
+    {
+      "track_id": 417,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 2204.0
+    },
+    {
+      "track_id": 462,
+      "team_id": 1,
+      "touches": null,
+      "passes": 3,
+      "shots": null,
+      "distance_px": 2945.6
+    },
+    {
+      "track_id": 476,
+      "team_id": 1,
+      "touches": null,
+      "passes": 2,
+      "shots": null,
+      "distance_px": 3668.4
+    },
+    {
+      "track_id": 487,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 1594.6
+    },
+    {
+      "track_id": 493,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 301.2
+    },
+    {
+      "track_id": 499,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 1200.2
+    },
+    {
+      "track_id": 506,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 596.6
+    },
+    {
+      "track_id": 511,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 77.7
+    },
+    {
+      "track_id": 512,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 402.1
+    },
+    {
+      "track_id": 515,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 13.8
+    },
+    {
+      "track_id": 553,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 2544.1
+    },
+    {
+      "track_id": 554,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 2689.0
+    },
+    {
+      "track_id": 583,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 2562.3
+    },
+    {
+      "track_id": 589,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 4844.7
+    },
+    {
+      "track_id": 592,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 5189.9
+    },
+    {
+      "track_id": 593,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 1445.5
+    },
+    {
+      "track_id": 598,
+      "team_id": 1,
+      "touches": null,
+      "passes": 1,
+      "shots": null,
+      "distance_px": 2783.2
+    },
+    {
+      "track_id": 670,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 214.5
+    },
+    {
+      "track_id": 676,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 4564.2
+    },
+    {
+      "track_id": 685,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 1354.2
+    },
+    {
+      "track_id": 722,
+      "team_id": 1,
+      "touches": null,
+      "passes": 1,
+      "shots": null,
+      "distance_px": 2519.0
+    },
+    {
+      "track_id": 749,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 3926.9
+    },
+    {
+      "track_id": 751,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 4135.7
+    },
+    {
+      "track_id": 789,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 242.5
+    },
+    {
+      "track_id": 823,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 479.7
+    },
+    {
+      "track_id": 824,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 1470.3
+    },
+    {
+      "track_id": 854,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 3271.3
+    },
+    {
+      "track_id": 897,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 2126.2
+    },
+    {
+      "track_id": 922,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 2071.5
+    },
+    {
+      "track_id": 940,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 1848.2
+    },
+    {
+      "track_id": 962,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 2214.3
+    },
+    {
+      "track_id": 967,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 2002.7
+    },
+    {
+      "track_id": 969,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 65.1
+    },
+    {
+      "track_id": 977,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 2042.9
+    },
+    {
+      "track_id": 978,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 74.2
+    },
+    {
+      "track_id": 983,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 2026.3
+    },
+    {
+      "track_id": 992,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 4453.8
+    },
+    {
+      "track_id": 1011,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 1945.7
+    },
+    {
+      "track_id": 1012,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 2006.5
+    },
+    {
+      "track_id": 1015,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 3087.0
+    },
+    {
+      "track_id": 1026,
+      "team_id": 1,
+      "touches": null,
+      "passes": 1,
+      "shots": null,
+      "distance_px": 4680.0
+    },
+    {
+      "track_id": 1027,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 3271.6
+    },
+    {
+      "track_id": 1033,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 3623.0
+    },
+    {
+      "track_id": 1037,
+      "team_id": 1,
+      "touches": null,
+      "passes": 1,
+      "shots": null,
+      "distance_px": 1700.5
+    },
+    {
+      "track_id": 1055,
+      "team_id": 1,
+      "touches": null,
+      "passes": 1,
+      "shots": null,
+      "distance_px": 1405.4
+    },
+    {
+      "track_id": 1064,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 62.6
+    },
+    {
+      "track_id": 1081,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 1095.2
+    },
+    {
+      "track_id": 1086,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 1700.4
+    },
+    {
+      "track_id": 1089,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 2028.4
+    },
+    {
+      "track_id": 1093,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 474.8
+    },
+    {
+      "track_id": 1094,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 3731.5
+    },
+    {
+      "track_id": 1095,
+      "team_id": 1,
+      "touches": null,
+      "passes": 1,
+      "shots": null,
+      "distance_px": 1743.4
+    },
+    {
+      "track_id": 1096,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 1323.5
+    },
+    {
+      "track_id": 1098,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 408.8
+    },
+    {
+      "track_id": 1099,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 591.2
+    },
+    {
+      "track_id": 1104,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 462.9
+    },
+    {
+      "track_id": 1109,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 140.6
+    },
+    {
+      "track_id": 1138,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 1118.4
+    },
+    {
+      "track_id": 1158,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 2545.7
+    },
+    {
+      "track_id": 1159,
+      "team_id": 1,
+      "touches": null,
+      "passes": 1,
+      "shots": null,
+      "distance_px": 1214.1
+    },
+    {
+      "track_id": 1164,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 1702.9
+    },
+    {
+      "track_id": 1183,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 593.4
+    },
+    {
+      "track_id": 1187,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 2483.0
+    },
+    {
+      "track_id": 1190,
+      "team_id": 1,
+      "touches": null,
+      "passes": 1,
+      "shots": null,
+      "distance_px": 2908.9
+    },
+    {
+      "track_id": 1196,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 1982.8
+    },
+    {
+      "track_id": 1198,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 1946.2
+    },
+    {
+      "track_id": 1202,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 571.6
+    },
+    {
+      "track_id": 1224,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 2036.0
+    },
+    {
+      "track_id": 1230,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 2408.8
+    },
+    {
+      "track_id": 1251,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 2206.1
+    },
+    {
+      "track_id": 1252,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 1824.6
+    },
+    {
+      "track_id": 1253,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 1719.0
+    },
+    {
+      "track_id": 1282,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 1482.7
+    },
+    {
+      "track_id": 1315,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 635.8
+    },
+    {
+      "track_id": 1344,
+      "team_id": 0,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 453.2
+    },
+    {
+      "track_id": 1348,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 51.5
+    },
+    {
+      "track_id": 1352,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 145.9
+    },
+    {
+      "track_id": 1353,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 489.4
+    },
+    {
+      "track_id": 1362,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 117.9
+    },
+    {
+      "track_id": 1363,
+      "team_id": 1,
+      "touches": null,
+      "passes": 0,
+      "shots": null,
+      "distance_px": 95.4
+    }
+  ],
+  "events": [
+    {
+      "type": "pass",
+      "frame": 226,
+      "time_s": 3.785,
+      "actor": 8,
+      "target": 11,
+      "details": {
+        "actor": 8,
+        "target": 11,
+        "departure_frame": 164,
+        "last_confirmed_contact_frame": 164,
+        "release_reacquired": false,
+        "reception_frame": 226,
+        "ball_coverage": 1.0,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 393,
+      "time_s": 6.582,
+      "actor": 11,
+      "target": 51,
+      "details": {
+        "actor": 11,
+        "target": 51,
+        "departure_frame": 325,
+        "last_confirmed_contact_frame": 325,
+        "release_reacquired": false,
+        "reception_frame": 393,
+        "ball_coverage": 0.928,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 579,
+      "time_s": 9.697,
+      "actor": 51,
+      "target": 189,
+      "details": {
+        "actor": 51,
+        "target": 189,
+        "departure_frame": 443,
+        "last_confirmed_contact_frame": 443,
+        "release_reacquired": false,
+        "reception_frame": 579,
+        "ball_coverage": 0.942,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 717,
+      "time_s": 12.008,
+      "actor": 189,
+      "target": 239,
+      "details": {
+        "actor": 189,
+        "target": 239,
+        "departure_frame": 671,
+        "last_confirmed_contact_frame": 671,
+        "release_reacquired": false,
+        "reception_frame": 717,
+        "ball_coverage": 1.0,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 896,
+      "time_s": 15.006,
+      "actor": 239,
+      "target": 192,
+      "details": {
+        "actor": 239,
+        "target": 192,
+        "departure_frame": 821,
+        "last_confirmed_contact_frame": 821,
+        "release_reacquired": false,
+        "reception_frame": 896,
+        "ball_coverage": 0.763,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 1079,
+      "time_s": 18.071,
+      "actor": 192,
+      "target": 239,
+      "details": {
+        "actor": 192,
+        "target": 239,
+        "departure_frame": 964,
+        "last_confirmed_contact_frame": 964,
+        "release_reacquired": false,
+        "reception_frame": 1079,
+        "ball_coverage": 0.534,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 1218,
+      "time_s": 20.399,
+      "actor": 239,
+      "target": 189,
+      "details": {
+        "actor": 239,
+        "target": 189,
+        "departure_frame": 1164,
+        "last_confirmed_contact_frame": 1164,
+        "release_reacquired": false,
+        "reception_frame": 1218,
+        "ball_coverage": 0.982,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 1394,
+      "time_s": 23.347,
+      "actor": 189,
+      "target": 11,
+      "details": {
+        "actor": 189,
+        "target": 11,
+        "departure_frame": 1319,
+        "last_confirmed_contact_frame": 1319,
+        "release_reacquired": false,
+        "reception_frame": 1394,
+        "ball_coverage": 0.763,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 1635,
+      "time_s": 27.383,
+      "actor": 11,
+      "target": 348,
+      "details": {
+        "actor": 11,
+        "target": 348,
+        "departure_frame": 1601,
+        "last_confirmed_contact_frame": 1601,
+        "release_reacquired": false,
+        "reception_frame": 1635,
+        "ball_coverage": 0.857,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 1784,
+      "time_s": 29.878,
+      "actor": 348,
+      "target": 11,
+      "details": {
+        "actor": 348,
+        "target": 11,
+        "departure_frame": 1693,
+        "last_confirmed_contact_frame": 1693,
+        "release_reacquired": false,
+        "reception_frame": 1784,
+        "ball_coverage": 0.576,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 1901,
+      "time_s": 31.838,
+      "actor": 11,
+      "target": 462,
+      "details": {
+        "actor": 11,
+        "target": 462,
+        "departure_frame": 1821,
+        "last_confirmed_contact_frame": 1821,
+        "release_reacquired": false,
+        "reception_frame": 1901,
+        "ball_coverage": 1.0,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 2164,
+      "time_s": 36.242,
+      "actor": 462,
+      "target": 476,
+      "details": {
+        "actor": 462,
+        "target": 476,
+        "departure_frame": 2111,
+        "last_confirmed_contact_frame": 2111,
+        "release_reacquired": false,
+        "reception_frame": 2164,
+        "ball_coverage": 1.0,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 2305,
+      "time_s": 38.604,
+      "actor": 476,
+      "target": 462,
+      "details": {
+        "actor": 476,
+        "target": 462,
+        "departure_frame": 2286,
+        "last_confirmed_contact_frame": 2286,
+        "release_reacquired": false,
+        "reception_frame": 2305,
+        "ball_coverage": 1.0,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 2702,
+      "time_s": 45.253,
+      "actor": 462,
+      "target": 476,
+      "details": {
+        "actor": 462,
+        "target": 476,
+        "departure_frame": 2608,
+        "last_confirmed_contact_frame": 2608,
+        "release_reacquired": false,
+        "reception_frame": 2702,
+        "ball_coverage": 1.0,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 2950,
+      "time_s": 49.406,
+      "actor": 476,
+      "target": 462,
+      "details": {
+        "actor": 476,
+        "target": 462,
+        "departure_frame": 2851,
+        "last_confirmed_contact_frame": 2746,
+        "release_reacquired": true,
+        "reception_frame": 2950,
+        "ball_coverage": 1.0,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 3151,
+      "time_s": 52.773,
+      "actor": 462,
+      "target": 10,
+      "details": {
+        "actor": 462,
+        "target": 10,
+        "departure_frame": 3094,
+        "last_confirmed_contact_frame": 3094,
+        "release_reacquired": false,
+        "reception_frame": 3151,
+        "ball_coverage": 0.948,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 3316,
+      "time_s": 55.536,
+      "actor": 10,
+      "target": 598,
+      "details": {
+        "actor": 10,
+        "target": 598,
+        "departure_frame": 3248,
+        "last_confirmed_contact_frame": 3248,
+        "release_reacquired": false,
+        "reception_frame": 3316,
+        "ball_coverage": 0.696,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 3468,
+      "time_s": 58.082,
+      "actor": 598,
+      "target": 722,
+      "details": {
+        "actor": 598,
+        "target": 722,
+        "departure_frame": 3396,
+        "last_confirmed_contact_frame": 3396,
+        "release_reacquired": false,
+        "reception_frame": 3468,
+        "ball_coverage": 0.808,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 3607,
+      "time_s": 60.41,
+      "actor": 722,
+      "target": 598,
+      "details": {
+        "actor": 722,
+        "target": 598,
+        "departure_frame": 3545,
+        "last_confirmed_contact_frame": 3545,
+        "release_reacquired": false,
+        "reception_frame": 3607,
+        "ball_coverage": 0.952,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "ball_transfer",
+      "frame": 4572,
+      "time_s": 76.571,
+      "actor": 1027,
+      "target": 1037,
+      "details": {
+        "actor": 1027,
+        "target": 1037,
+        "departure_frame": 4496,
+        "last_confirmed_contact_frame": 4496,
+        "release_reacquired": false,
+        "reception_frame": 4572,
+        "ball_coverage": 0.948,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": true
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 4730,
+      "time_s": 79.218,
+      "actor": 1037,
+      "target": 1055,
+      "details": {
+        "actor": 1037,
+        "target": 1055,
+        "departure_frame": 4607,
+        "last_confirmed_contact_frame": 4607,
+        "release_reacquired": false,
+        "reception_frame": 4730,
+        "ball_coverage": 0.806,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 5003,
+      "time_s": 83.79,
+      "actor": 1055,
+      "target": 1095,
+      "details": {
+        "actor": 1055,
+        "target": 1095,
+        "departure_frame": 4926,
+        "last_confirmed_contact_frame": 4926,
+        "release_reacquired": false,
+        "reception_frame": 5003,
+        "ball_coverage": 0.962,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 5185,
+      "time_s": 86.838,
+      "actor": 1095,
+      "target": 1159,
+      "details": {
+        "actor": 1095,
+        "target": 1159,
+        "departure_frame": 5099,
+        "last_confirmed_contact_frame": 5099,
+        "release_reacquired": false,
+        "reception_frame": 5185,
+        "ball_coverage": 0.644,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 5312,
+      "time_s": 88.965,
+      "actor": 1159,
+      "target": 1026,
+      "details": {
+        "actor": 1159,
+        "target": 1026,
+        "departure_frame": 5247,
+        "last_confirmed_contact_frame": 5247,
+        "release_reacquired": false,
+        "reception_frame": 5312,
+        "ball_coverage": 0.652,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 5485,
+      "time_s": 91.862,
+      "actor": 1026,
+      "target": 1190,
+      "details": {
+        "actor": 1026,
+        "target": 1190,
+        "departure_frame": 5425,
+        "last_confirmed_contact_frame": 5425,
+        "release_reacquired": false,
+        "reception_frame": 5485,
+        "ball_coverage": 0.639,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "pass",
+      "frame": 5532,
+      "time_s": 92.649,
+      "actor": 1190,
+      "target": 1252,
+      "details": {
+        "actor": 1190,
+        "target": 1252,
+        "departure_frame": 5517,
+        "last_confirmed_contact_frame": 5517,
+        "release_reacquired": false,
+        "reception_frame": 5532,
+        "ball_coverage": 0.938,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": false
+      }
+    },
+    {
+      "type": "ball_transfer",
+      "frame": 5628,
+      "time_s": 94.257,
+      "actor": 1252,
+      "target": 1282,
+      "details": {
+        "actor": 1252,
+        "target": 1282,
+        "departure_frame": 5556,
+        "last_confirmed_contact_frame": 5556,
+        "release_reacquired": false,
+        "reception_frame": 5628,
+        "ball_coverage": 0.699,
+        "reason": null,
+        "method": "ground_contacts_v2",
+        "review_required": true
+      }
+    }
+  ],
+  "pass_network": {
+    "nodes": [
+      {
+        "id": 1,
+        "team_id": 1
+      },
+      {
+        "id": 2,
+        "team_id": 1
+      },
+      {
+        "id": 3,
+        "team_id": 0
+      },
+      {
+        "id": 4,
+        "team_id": 1
+      },
+      {
+        "id": 5,
+        "team_id": 0
+      },
+      {
+        "id": 6,
+        "team_id": 0
+      },
+      {
+        "id": 7,
+        "team_id": 0
+      },
+      {
+        "id": 8,
+        "team_id": 1
+      },
+      {
+        "id": 9,
+        "team_id": 1
+      },
+      {
+        "id": 10,
+        "team_id": 1
+      },
+      {
+        "id": 11,
+        "team_id": 1
+      },
+      {
+        "id": 12,
+        "team_id": 0
+      },
+      {
+        "id": 13,
+        "team_id": 0
+      },
+      {
+        "id": 33,
+        "team_id": 0
+      },
+      {
+        "id": 51,
+        "team_id": 1
+      },
+      {
+        "id": 55,
+        "team_id": 1
+      },
+      {
+        "id": 57,
+        "team_id": 0
+      },
+      {
+        "id": 61,
+        "team_id": 0
+      },
+      {
+        "id": 117,
+        "team_id": 0
+      },
+      {
+        "id": 118,
+        "team_id": 0
+      },
+      {
+        "id": 189,
+        "team_id": 1
+      },
+      {
+        "id": 192,
+        "team_id": 1
+      },
+      {
+        "id": 239,
+        "team_id": 1
+      },
+      {
+        "id": 250,
+        "team_id": 0
+      },
+      {
+        "id": 309,
+        "team_id": 1
+      },
+      {
+        "id": 348,
+        "team_id": 1
+      },
+      {
+        "id": 353,
+        "team_id": 0
+      },
+      {
+        "id": 359,
+        "team_id": 1
+      },
+      {
+        "id": 362,
+        "team_id": 0
+      },
+      {
+        "id": 417,
+        "team_id": 0
+      },
+      {
+        "id": 462,
+        "team_id": 1
+      },
+      {
+        "id": 476,
+        "team_id": 1
+      },
+      {
+        "id": 487,
+        "team_id": 1
+      },
+      {
+        "id": 493,
+        "team_id": 1
+      },
+      {
+        "id": 499,
+        "team_id": 0
+      },
+      {
+        "id": 506,
+        "team_id": 1
+      },
+      {
+        "id": 511,
+        "team_id": 0
+      },
+      {
+        "id": 512,
+        "team_id": 0
+      },
+      {
+        "id": 515,
+        "team_id": 0
+      },
+      {
+        "id": 553,
+        "team_id": 1
+      },
+      {
+        "id": 554,
+        "team_id": 0
+      },
+      {
+        "id": 583,
+        "team_id": 0
+      },
+      {
+        "id": 589,
+        "team_id": 0
+      },
+      {
+        "id": 592,
+        "team_id": 1
+      },
+      {
+        "id": 593,
+        "team_id": 0
+      },
+      {
+        "id": 598,
+        "team_id": 1
+      },
+      {
+        "id": 670,
+        "team_id": 1
+      },
+      {
+        "id": 676,
+        "team_id": 0
+      },
+      {
+        "id": 685,
+        "team_id": 0
+      },
+      {
+        "id": 722,
+        "team_id": 1
+      },
+      {
+        "id": 749,
+        "team_id": 1
+      },
+      {
+        "id": 751,
+        "team_id": 0
+      },
+      {
+        "id": 789,
+        "team_id": 0
+      },
+      {
+        "id": 823,
+        "team_id": 0
+      },
+      {
+        "id": 824,
+        "team_id": 0
+      },
+      {
+        "id": 854,
+        "team_id": 0
+      },
+      {
+        "id": 897,
+        "team_id": 0
+      },
+      {
+        "id": 922,
+        "team_id": 1
+      },
+      {
+        "id": 940,
+        "team_id": 1
+      },
+      {
+        "id": 962,
+        "team_id": 0
+      },
+      {
+        "id": 967,
+        "team_id": 1
+      },
+      {
+        "id": 969,
+        "team_id": 1
+      },
+      {
+        "id": 977,
+        "team_id": 0
+      },
+      {
+        "id": 978,
+        "team_id": 0
+      },
+      {
+        "id": 983,
+        "team_id": 1
+      },
+      {
+        "id": 992,
+        "team_id": 0
+      },
+      {
+        "id": 1011,
+        "team_id": 0
+      },
+      {
+        "id": 1012,
+        "team_id": 1
+      },
+      {
+        "id": 1015,
+        "team_id": 1
+      },
+      {
+        "id": 1026,
+        "team_id": 1
+      },
+      {
+        "id": 1027,
+        "team_id": 0
+      },
+      {
+        "id": 1033,
+        "team_id": 0
+      },
+      {
+        "id": 1037,
+        "team_id": 1
+      },
+      {
+        "id": 1055,
+        "team_id": 1
+      },
+      {
+        "id": 1064,
+        "team_id": 0
+      },
+      {
+        "id": 1081,
+        "team_id": 0
+      },
+      {
+        "id": 1086,
+        "team_id": 0
+      },
+      {
+        "id": 1089,
+        "team_id": 1
+      },
+      {
+        "id": 1093,
+        "team_id": 0
+      },
+      {
+        "id": 1094,
+        "team_id": 0
+      },
+      {
+        "id": 1095,
+        "team_id": 1
+      },
+      {
+        "id": 1096,
+        "team_id": 1
+      },
+      {
+        "id": 1098,
+        "team_id": 1
+      },
+      {
+        "id": 1099,
+        "team_id": 1
+      },
+      {
+        "id": 1104,
+        "team_id": 0
+      },
+      {
+        "id": 1109,
+        "team_id": 0
+      },
+      {
+        "id": 1138,
+        "team_id": 1
+      },
+      {
+        "id": 1158,
+        "team_id": 0
+      },
+      {
+        "id": 1159,
+        "team_id": 1
+      },
+      {
+        "id": 1164,
+        "team_id": 1
+      },
+      {
+        "id": 1183,
+        "team_id": 0
+      },
+      {
+        "id": 1187,
+        "team_id": 0
+      },
+      {
+        "id": 1190,
+        "team_id": 1
+      },
+      {
+        "id": 1196,
+        "team_id": 0
+      },
+      {
+        "id": 1198,
+        "team_id": 1
+      },
+      {
+        "id": 1202,
+        "team_id": 0
+      },
+      {
+        "id": 1224,
+        "team_id": 1
+      },
+      {
+        "id": 1230,
+        "team_id": 0
+      },
+      {
+        "id": 1251,
+        "team_id": 0
+      },
+      {
+        "id": 1252,
+        "team_id": 1
+      },
+      {
+        "id": 1253,
+        "team_id": 0
+      },
+      {
+        "id": 1282,
+        "team_id": 0
+      },
+      {
+        "id": 1315,
+        "team_id": 1
+      },
+      {
+        "id": 1344,
+        "team_id": 0
+      },
+      {
+        "id": 1348,
+        "team_id": 1
+      },
+      {
+        "id": 1352,
+        "team_id": 1
+      },
+      {
+        "id": 1353,
+        "team_id": 1
+      },
+      {
+        "id": 1362,
+        "team_id": 1
+      },
+      {
+        "id": 1363,
+        "team_id": 1
+      }
+    ],
+    "edges": [
+      {
+        "from": 462,
+        "to": 476,
+        "count": 2
+      },
+      {
+        "from": 476,
+        "to": 462,
+        "count": 2
+      },
+      {
+        "from": 8,
+        "to": 11,
+        "count": 1
+      },
+      {
+        "from": 11,
+        "to": 51,
+        "count": 1
+      },
+      {
+        "from": 51,
+        "to": 189,
+        "count": 1
+      },
+      {
+        "from": 189,
+        "to": 239,
+        "count": 1
+      },
+      {
+        "from": 239,
+        "to": 192,
+        "count": 1
+      },
+      {
+        "from": 192,
+        "to": 239,
+        "count": 1
+      },
+      {
+        "from": 239,
+        "to": 189,
+        "count": 1
+      },
+      {
+        "from": 189,
+        "to": 11,
+        "count": 1
+      },
+      {
+        "from": 11,
+        "to": 348,
+        "count": 1
+      },
+      {
+        "from": 348,
+        "to": 11,
+        "count": 1
+      },
+      {
+        "from": 11,
+        "to": 462,
+        "count": 1
+      },
+      {
+        "from": 462,
+        "to": 10,
+        "count": 1
+      },
+      {
+        "from": 10,
+        "to": 598,
+        "count": 1
+      },
+      {
+        "from": 598,
+        "to": 722,
+        "count": 1
+      },
+      {
+        "from": 722,
+        "to": 598,
+        "count": 1
+      },
+      {
+        "from": 1037,
+        "to": 1055,
+        "count": 1
+      },
+      {
+        "from": 1055,
+        "to": 1095,
+        "count": 1
+      },
+      {
+        "from": 1095,
+        "to": 1159,
+        "count": 1
+      },
+      {
+        "from": 1159,
+        "to": 1026,
+        "count": 1
+      },
+      {
+        "from": 1026,
+        "to": 1190,
+        "count": 1
+      },
+      {
+        "from": 1190,
+        "to": 1252,
+        "count": 1
+      }
+    ]
+  },
+  "summary": {
+    "total_touches": null,
+    "total_passes": 25,
+    "total_interceptions": null,
+    "total_shots": null,
+    "total_goals": null
+  },
+  "possession_known_frames": 2834,
+  "possession_coverage_percent": 43.9,
+  "possession_basis": "Observed confirmed ground-contact frames only, not full-match possession",
+  "event_detection": {
+    "experimental": true,
+    "unsupported": [
+      "goal",
+      "shot",
+      "cross",
+      "assist",
+      "aerial_contact"
+    ]
+  },
+  "metric_notes": {
+    "total_passes": "Ground-pass candidates; not measured accuracy or all pass attempts",
+    "distance_px": "Image displacement includes camera motion; not physical distance",
+    "pass_completion_percent": "Unavailable: unsuccessful pass attempts are not classified"
+  }
+}
