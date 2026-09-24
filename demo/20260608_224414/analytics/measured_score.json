@@ -1,0 +1,93 @@
+{
+  "overall": {
+    "tp": 5,
+    "fp": 3,
+    "fn": 5,
+    "precision": 0.625,
+    "recall": 0.5,
+    "f1": 0.5555555555555556
+  },
+  "per_class": {
+    "clearance": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    "interception": {
+      "tp": 1,
+      "fp": 1,
+      "fn": 0,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666
+    },
+    "pass": {
+      "tp": 3,
+      "fp": 0,
+      "fn": 2,
+      "precision": 1.0,
+      "recall": 0.6,
+      "f1": 0.75
+    },
+    "touch": {
+      "tp": 0,
+      "fp": 2,
+      "fn": 3,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0
+    }
+  },
+  "matches": [
+    {
+      "prediction_index": 1,
+      "reference_index": 0,
+      "timing_error_seconds": 0.7200000000000002
+    },
+    {
+      "prediction_index": 2,
+      "reference_index": 1,
+      "timing_error_seconds": 0.1200000000000001
+    },
+    {
+      "prediction_index": 3,
+      "reference_index": 2,
+      "timing_error_seconds": 1.1999999999999993
+    },
+    {
+      "prediction_index": 5,
+      "reference_index": 7,
+      "timing_error_seconds": 0.35999999999999943
+    },
+    {
+      "prediction_index": 6,
+      "reference_index": 8,
+      "timing_error_seconds": 0.3200000000000003
+    }
+  ],
+  "false_positive_indices": [
+    0,
+    4,
+    7
+  ],
+  "missed_reference_indices": [
+    3,
+    4,
+    5,
+    6,
+    9
+  ],
+  "ignored_prediction_count": 0,
+  "tolerance_seconds": 1.5,
+  "match_actors": false,
+  "event_types": [
+    "pass",
+    "interception",
+    "touch",
+    "clearance"
+  ],
+  "note": "Scores apply only to reviewed windows, not the entire clip or all football accuracy"
+}

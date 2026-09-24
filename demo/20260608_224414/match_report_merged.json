@@ -544,5 +544,60 @@
     "total_interceptions": 2,
     "total_shots": 0,
     "total_goals": 0
+  },
+  "measured_accuracy": {
+    "reference": "docs/references/08fd33_4_full_clip.json",
+    "tolerance_seconds": 1.5,
+    "scored_events": "the events in THIS file (team-corrected merged report)",
+    "overall": {
+      "tp": 5,
+      "fp": 3,
+      "fn": 5,
+      "precision": 0.625,
+      "recall": 0.5,
+      "f1": 0.556
+    },
+    "per_class": {
+      "clearance": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "interception": {
+        "tp": 1,
+        "fp": 1,
+        "fn": 0,
+        "precision": 0.5,
+        "recall": 1.0,
+        "f1": 0.667
+      },
+      "pass": {
+        "tp": 3,
+        "fp": 0,
+        "fn": 2,
+        "precision": 1.0,
+        "recall": 0.6,
+        "f1": 0.75
+      },
+      "touch": {
+        "tp": 0,
+        "fp": 2,
+        "fn": 3,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      }
+    },
+    "comparison": {
+      "raw_events_before_team_correction": {
+        "precision": 0.5,
+        "recall": 0.4,
+        "f1": 0.444
+      }
+    },
+    "note": "Lower than the Messi run because 5 of this clip's 10 events put the ball in the air, against 1 of 29 on Messi, and aerial contacts are deliberately disabled. Identity on this clip is the best we have: 26 players 13/13, with tracks holding the full 30s, which is why its per-player metres are full-clip figures rather than fragments."
   }
 }

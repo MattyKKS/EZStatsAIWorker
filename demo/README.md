@@ -78,10 +78,39 @@ python scripts/evaluate_events.py \
 (13/13), 8 events, no phantom IDs. Best for showing clean tracking and team
 colours.
 
-Measured against `docs/references/08fd33_4_full_clip.json`: **precision 0.625,
-recall 0.500**. Much weaker than Messi, and the reason is visible in the data —
-**5 of its 10 events put the ball in the air**, against 1 of 29 on Messi. That is
-the same disabled aerial capability, quantified.
+Measured against `analytics/ground_truth.json` at 1.5 s tolerance:
+
+| | Precision | Recall | F1 |
+|---|---|---|---|
+| Raw events (old teams) | 0.500 | 0.400 | 0.444 |
+| **This file** (team-corrected) | **0.625** | **0.500** | **0.556** |
+
+Weaker than Messi, and the reason is visible in the data: **5 of this clip's 10
+events put the ball in the air**, against 1 of 29 on Messi. Same system, same
+deliberately disabled aerial contact.
+
+The jersey-colour team fix earned the improvement above, and the mechanism is
+checkable: in the raw events t=26.36 was an interception and t=28.32 a pass,
+while the truth is a pass at 26 and an interception at 28. The **types were
+swapped**, because a TB player was coloured TA16. One wrong team produces two
+false positives *and* two false negatives, since same-team makes a pass and
+opposite-team makes an interception.
+
+### Where this clip is the better demo
+
+Identity holds for the whole 30 s here, so its per-player numbers are full-clip
+figures rather than fragments:
+
+| | Messi | this clip |
+|---|---|---|
+| Track length | 9–20 s (fragments) | **29.8 s (full clip)** |
+| Distance per player | 29–46 m | **88–111 m** |
+
+`analytics/` carries the same set as the Messi run: `map2d.mp4`,
+`heatmap_team_*.jpg`, `player_metrics.json` (metres), `calibration_overlay.jpg`
+(100% of frames calibrate on this clip), `ground_truth.json`, `measured_score.json`.
+
+Use **Messi for event accuracy**, **this clip for identity and player metrics**.
 
 ---
 
