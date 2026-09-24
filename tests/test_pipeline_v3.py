@@ -162,3 +162,32 @@ def test_notebook_event_only_cells_skip_detection_and_rendering():
     assert "20260910_170402" in runs[0]
     assert "20260910_173839" in runs[1]
     assert "20260910_174331" in runs[2]
+
+
+def test_notebook_bundle_hash_and_safe_extraction(tmp_path):
+    import ast
+    import hashlib
+    import io
+    import stat
+    import tempfile
+    import zipfile
+    import pytest
+    notebook = json.loads((Path(__file__).resolve().parents[1] / "docs/run_on_colab_v3.ipynb").read_text())
+    source = next("".join(c["source"]) for c in notebook["cells"]
+                  if "def unpack_event_bundle(" in "".join(c["source"]))
+    definition = next(n for n in ast.parse(source).body if isinstance(n, ast.FunctionDef) and n.name == "unpack_event_bundle")
+    namespace = dict(Path=Path, hashlib=hashlib, io=io, stat=stat, tempfile=tempfile, zipfile=zipfile)
+    exec(compile(ast.Module(body=[definition], type_ignores=[]), "bundle_helper", "exec"), namespace)
+    bundle = tmp_path / "bundle.zip"
+    with zipfile.ZipFile(bundle, "w") as archive:
+        archive.writestr("scripts/replay_events.py", "# test bundle")
+    digest = hashlib.sha256(bundle.read_bytes()).hexdigest()
+    result = namespace["unpack_event_bundle"](bundle, digest, tmp_path)
+    assert (result / "scripts/replay_events.py").is_file()
+    with pytest.raises(ValueError, match="checksum"):
+        namespace["unpack_event_bundle"](bundle, "incorrect", tmp_path)
+    with zipfile.ZipFile(bundle, "w") as archive:
+        archive.writestr("../outside.py", "# invalid")
+    with pytest.raises(ValueError, match="Unsafe path"):
+        namespace["unpack_event_bundle"](bundle, hashlib.sha256(bundle.read_bytes()).hexdigest(), tmp_path)
+    assert not (tmp_path / "outside.py").exists()

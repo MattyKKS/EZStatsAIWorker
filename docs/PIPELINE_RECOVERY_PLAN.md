@@ -213,3 +213,72 @@ python -u scripts/replay_events.py --run-dir /content/drive/MyDrive/ezstats/outp
 
 The existing notebook's E0-E3 cells select V2 and still skip rendering. Change
 `EVENT_ENGINE` to `contacts_v1` for comparison. Full inference cells are unchanged.
+
+## September 24 — first measured event score, and why goals are not a threshold problem
+
+### Measured (not claimed)
+
+`scripts/evaluate_events.py`, Messi run `20260910_170402` vs the reviewed
+development windows in `docs/references/messi_development_windows.json`
+(14 s, 6 events, tolerance 1.0 s):
+
+    precision 1.00   recall 0.50   F1 0.67
+    pass          3 TP, 0 FP, 1 FN
+    shot_attempt  0 TP,        1 FN
+    goal          0 TP,        1 FN
+
+Every event emitted inside the reviewed windows was correct; 23 further
+candidates fall outside those windows and are neither credited nor penalised.
+The whole recall deficit is shot and goal, which no component produces. On
+passes alone this is 75% recall at 100% precision. This is a 14-second
+development diagnostic on one clip, NOT full-clip accuracy.
+
+### Geometric goal detection was implemented and does not currently work
+
+`src/ez_worker/analytics/goal_detection.py` tests the actual Law: did the ball
+cross a goal line between the posts (7.32 m), persistently, having approached
+from inside the field. It consumes `FieldProjector` output, emits candidates with
+evidence, and always sets requires_review.
+
+It returns zero candidates on Messi — because the ball almost never has a
+quality-gated field position:
+
+- 5,401 ball observations, 237 with a valid projection.
+- `FieldProjector` accepts 29 of 1,123 sampled frames (2.6%). Keypoints are NOT
+  the problem: 1,099 of those frames carry >= 6 landmarks (median 8). The
+  homography fit rejects them as degenerate/inconsistent, needing >= 6 RANSAC
+  inliers at <= 4 px while accepted frames already sit at 0.44-3.60 px.
+
+Tolerance sweep (valid sampled frames, and frames inside the annotated
+94-97 s goal window):
+
+    max_error_px      Messi            in 94-97s      08fd33_4
+    4.0 (current)     29/1123  (2.6%)      0          57/150  (38.0%)
+    6.0              112/1123 (10.0%)      0          92/150  (61.3%)
+    8.0              268/1123 (23.9%)      1         148/150  (98.7%)
+    12.0             618/1123 (55.0%)      9         150/150 (100.0%)
+    20.0            1029/1123 (91.6%)     12         150/150 (100.0%)
+
+Two conclusions, and the second matters more:
+
+1. For 08fd33_4 the 4 px gate is simply too strict: 8 px takes coverage from 38%
+   to 98.7% at a median p90 error of 4.40 px. Worth revisiting deliberately,
+   with the positional consequence in centimetres measured first.
+2. For Messi, loosening does not rescue goal detection. Even at 20 px only 12 of
+   roughly 180 frames in the goal window calibrate. **Pitch calibration is worst
+   precisely when a goal occurs**, because the camera tightens on the penalty
+   area and few pitch landmarks remain visible. Ground-plane homography is
+   therefore the wrong instrument for confirming goals in this footage, and a
+   ball in the air projects past the line regardless.
+
+Do not tune the tolerance until the Messi goal appears. That fits the threshold
+to one known answer and is how the previous four months were spent.
+
+### Implication
+
+A goal detector for this footage needs evidence that survives a tight camera:
+goal-mouth/net appearance, post detection in image space, or a trained
+shot/goal spotter (see sn-spotting). Until one exists, a goal shown in a demo
+must be marked with the existing operator flag
+(`report_cleanup --goal-frame N`) and labelled as operator-confirmed, never
+presented as automatic detection.
