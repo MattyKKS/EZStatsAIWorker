@@ -53,7 +53,26 @@ def main(argv=None):
     from ez_worker.schemas import AnalysisArtifacts, TrackObservation, VideoMeta
 
     source = args.run_dir.resolve()
-    payload = (source / "tracks.json").read_bytes()
+    # Read whichever saved track file actually carries team_id.
+    #
+    # v3 runs write teams into tracks.json, but runs from the earlier pipeline
+    # (including the demo) leave tracks.json team-less and keep teams only in
+    # tracks_with_teams.json. Reading tracks.json unconditionally therefore threw
+    # the teams away on exactly those runs, and the contact engine cannot label a
+    # transfer pass-or-interception without them: replaying the demo produced 8
+    # `ball_transfer` events with team "?" and 0.0% possession coverage, despite
+    # locating both reviewed passes with the correct actors (3.68s 25->6,
+    # 6.64s 6->171). The events were right; only the class was unknown.
+    payload_path = source / "tracks.json"
+    teamed = source / "tracks_with_teams.json"
+    if teamed.is_file():
+        candidate = teamed.read_bytes()
+        if any(o.get("team_id") is not None for o in json.loads(candidate)):
+            payload_path = teamed
+    payload = payload_path.read_bytes()
+    if payload_path.name != "tracks.json":
+        print(f"Using {payload_path.name} (it carries team_id; tracks.json does not).",
+              flush=True)
     tracks = [TrackObservation(**o) for o in json.loads(payload)]
     video = VideoMeta(**json.loads((source / "video_meta.json").read_text(encoding="utf-8")))
     if args.video:
