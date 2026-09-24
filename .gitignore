@@ -14,4 +14,11 @@ __pycache__/
 /artifacts/
 /checkpoints/
 
+# Third-party source fetched at setup time, deliberately NOT committed.
+# PnLCalib is GPL-2.0 (copyleft). Vendoring it into this repository would put
+# this project's own source under the same obligation. Keep it fetched, keep the
+# boundary explicit, and decide the commercial route before shipping:
+# comply, reimplement the published method, or use a permissively licensed model.
+/vendor/
+
 share_chat.html
