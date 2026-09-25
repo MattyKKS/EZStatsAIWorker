@@ -121,12 +121,55 @@ combined into one person's stats.
 | Language | **Python 3.11–3.13** |
 | Detection | **Ultralytics YOLOv8** (`yolov8m` players, `yolov8x` ball) |
 | Tracking | **ByteTrack** (Ultralytics) |
-| Appearance / teams | **SigLIP** (`google/siglip-base-patch16-224`) + **UMAP** + **KMeans** |
+| Appearance / teams | **SigLIP** + **UMAP** + **KMeans** |
 | **Pitch calibration** | **PnLCalib** (HRNetv2 keypoints **+ field lines**) ⚠️ GPL-2.0 |
 | Geometry / CV | **OpenCV**, **NumPy**, **scikit-learn**, **shapely** |
 | Helpers | **supervision** (pinned `0.25.1`), **Roboflow `sports`** |
 | Schema | **Pydantic** |
 | Compute | local NVIDIA GPU (CUDA) or **Google Colab T4** |
+
+#### What each technology actually does
+
+| Technology | What it is | What we use it for |
+|---|---|---|
+| **YOLOv8** (Ultralytics) | Real-time object detector | Two separate models. `yolov8m` fine-tuned on 298 labelled images finds **players, goalkeepers and referees**. `yolov8x` finds the **ball**, which needs a bigger model because the ball is only a few pixels across. |
+| **InferenceSlicer** (supervision) | Tiled inference — cuts the frame into overlapping tiles and detects in each | Only for the ball. A ball 6 px wide in a 1920 px frame is nearly invisible to a detector that downscales the whole image; slicing keeps it at full resolution. |
+| **ByteTrack** | Multi-object tracker: Kalman motion prediction + IoU box overlap | Turns per-frame boxes into a persistent `track_id` per player. **It has no appearance model** — it only knows *where* boxes are, not what they look like, which is why two same-team players crossing can swap identities. |
+| **SigLIP** (`google/siglip-base-patch16-224`) | Vision transformer that turns an image crop into a **768-number embedding** describing its appearance | Fallback team classifier, and the intended future fix for identity. The embedding captures kit, pose, background and lighting together — powerful, but for "which of two shirts is this" that extra information is noise. |
+| **UMAP** | Non-linear dimensionality reduction | Compresses SigLIP's 768 numbers down to 3 so clustering is stable. Only used in the SigLIP path. |
+| **KMeans** (scikit-learn) | Clusters points into *k* groups | Used **three separate times**: (1) splitting shirt pixels from background inside one crop, (2) grouping players into two teams by shirt colour, (3) clustering SigLIP embeddings in the fallback path. |
+| **PnLCalib** | Sports-field registration: an HRNetv2 network predicting heatmaps for **pitch keypoints *and* field-line ends**, then fitting a camera with RANSAC + DLT and refining on points *and* lines | Works out **where the camera is** for each frame. Lines are the key idea: when the camera zooms into the box the corners leave frame, but the long painted lines stay, so a calibration is still possible. |
+| **RANSAC** | Robust model fitting that ignores outliers | Fits the camera from detected landmarks while discarding mis-detected ones. Without it a single bad keypoint wrecks the whole frame. |
+| **Homography** | 3×3 matrix mapping one plane to another | Converts a player's **foot pixel** to a **position in metres** on the pitch. This is what makes heatmaps, distances and the 2D map possible at all. |
+| **OpenCV** | General computer-vision library | Video reading and writing, colour conversion (BGR↔HSV), the geometry above, and all drawing on the output video. |
+| **supervision** (Roboflow) | Helper library for detection pipelines | Box containers, the ellipse/label annotators seen on the video, `InferenceSlicer`, and a ByteTrack wrapper. **Pinned to 0.25.1** — the tracker's internals changed in later versions and results stopped matching. |
+| **`sports`** (Roboflow) | Football-specific helpers | The standard pitch model (line positions, dimensions) used to draw the 2D map and place landmarks. |
+| **NumPy** | Array maths | Every coordinate transform, distance and averaging step. |
+| **shapely** / **lsq-ellipse** | Geometry and ellipse fitting | Required by PnLCalib for the centre circle and line handling. |
+| **Pydantic** | Runtime schema validation | Validates every track, event and report object, so a malformed field fails immediately instead of silently corrupting a report. |
+| **ffmpeg** | Video encoding | Transcoding and compression of output video. |
+
+#### Fallback chains — what runs if the primary fails
+
+The pipeline keeps the older method at several stages rather than deleting it, so
+a regression can be reverted with a flag instead of a rewrite.
+
+| Stage | Primary (current) | Fallback / older path | When the fallback matters |
+|---|---|---|---|
+| **Team assignment** | **Jersey colour** — top-half crop, KMeans shirt-vs-background, corner vote, one decision per track | **SigLIP + UMAP + KMeans**, still runs in the pipeline | Colour wins when the two kits differ in hue or brightness (measured 23/25 vs SigLIP's 22/26). SigLIP covers kits where colour is genuinely ambiguous. |
+| **Pitch calibration** | **PnLCalib** (keypoints + lines) | **YOLOv8-pose**, 32 keypoints, still in the repo | The old model found only 8–9 of its 32 landmarks and produced a valid camera on as little as 2.6% of frames. Kept only for comparison. |
+| **Event detection** | **`contacts_v2`** — foot distance scaled by player height, ambiguity margin, temporal support | **Legacy rule FSM** (~20 hand-tuned thresholds) | The FSM is what produced the original benchmark run and is still selectable. |
+| **Goal detection** | **Image-space goal-mouth containment** | Ground-plane goal-line crossing (written, superseded) | The ground-plane test cannot handle an airborne ball; the image-space test makes ball height irrelevant. |
+| **Video rendering** | **Draw directly from the pipeline's tracks** | Original renderer that re-detected and re-tracked | The old renderer created a second set of IDs and matched them back by proximity; drawing from the tracks makes the video's IDs identical to the report's. |
+| **Ball in the video** | Live ball detector per frame | Saved ball track (`--no-ball-detector`) | The saved track is smoother on blurry footage. |
+| **Homography per frame** | Per-frame camera from PnLCalib | Nearest previously-calibrated frame, then a single whole-clip matrix | Frames where calibration fails borrow the nearest valid one rather than dropping out. |
+
+#### Why two models for detection rather than one
+
+Players occupy hundreds of pixels; the ball often occupies fewer than ten. One
+model tuned for both is worse at each. Separating them lets the ball detector run
+at high resolution with tiled inference while the player detector runs normally —
+measured ball coverage is 80–93% of frames.
 
 ---
 
@@ -140,8 +183,8 @@ Draw this as a **linear pipeline with one branch at the end** (report + video).
 | 2 | **Player detection** | YOLOv8m (150 ep, 298 imgs) | frame → boxes: player / goalkeeper / referee |
 | 3 | **Ball detection** | YOLOv8x @1280 + tiled inference (`InferenceSlicer`) | frame → ball box |
 | 4 | **Tracking** | ByteTrack (Kalman + IoU) | boxes → persistent `track_id` |
-| 5 | **Appearance** | SigLIP → 768-d embedding per crop | crop → embedding |
-| 6 | **Team assignment** | **Jersey colour**: top-half crop → KMeans → corner vote → per-track clustering (SigLIP as fallback) | track → `team_id`, **one decision per track** |
+| 5 | **Appearance** | SigLIP → 768-d embedding per crop | crop → embedding. Feeds stage 6's fallback today; it is also the intended fix for same-team identity, since it is the only appearance signal we compute |
+| 6 | **Team assignment** | **Jersey colour** (primary): top-half crop → KMeans shirt-vs-background → corner vote → per-track clustering. **SigLIP + UMAP + KMeans still runs as the fallback** | track → `team_id`, **one decision per track**, never per frame |
 | 7 | **Pitch calibration** | **PnLCalib** — HRNetv2 heatmaps for keypoints *and* line extremities, RANSAC+DLT, PnL refinement | frame → camera matrix |
 | 8 | **Coordinate transform** | Homography, quality-gated | pixel (foot point) → **pitch metres** |
 | 9 | **Event detection** | Rule engine (`contacts_v2`): foot distance scaled by player height, ambiguity margin, temporal support. **Goals:** 3D goal mouth projected into the image, ball-inside test | tracks + ball + camera → passes, interceptions, touches, **goals** |
