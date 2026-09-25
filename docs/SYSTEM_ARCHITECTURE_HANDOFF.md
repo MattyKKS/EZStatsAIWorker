@@ -16,7 +16,7 @@ The original architecture diagram is now wrong in three ways. Please redraw:
 |---|---|---|
 | **Redis + BullMQ job queue** | **Not implemented.** `redis` appears in `docker-compose.yml` but is **not a dependency in `package.json`** and no code uses it. There is no queue, no worker pool, no job scheduling. | **Remove Redis and the queue entirely** |
 | **Cloud deployment** (RunPod / Lambda / hosted API) | **Not deployed.** Everything runs locally: Postgres in Docker, backend on `localhost:4000`, frontend on `localhost:3000`, AI worker on the developer's machine or Google Colab. | **Remove cloud/hosting boxes**; label it "local / single machine" |
-| **Backend triggers the AI worker** | **Manual hand-off.** The worker is run by hand and writes a run folder; the backend later *reads* that folder from disk. Nothing calls the worker over the network. | Draw the link as **"shared folder (manual)"**, a dashed arrow, not an API call |
+| **Backend triggers the AI worker** | **Implemented, disabled for the demo.** The backend spawns the worker as a local child process on the uploaded video (`AiWorkerService`), tracks it through `QUEUED → PROCESSING → COMPLETED`, and records the report path. `AI_WORKER_AUTORUN` is **false by default** because a full run takes minutes to hours — longer than a live demo can wait. | **Keep the arrow.** Label it **"local process invocation (disabled during demo)"** |
 
 Everything else in the proposal — NestJS, Prisma, PostgreSQL, Docker, Next.js,
 the Python worker — is real and in use.
@@ -41,7 +41,9 @@ the Python worker — is real and in use.
                           backend READS the run folder│ (read-only)
                                                       │
 ┌─────────────────────────────────────────────────────┴──────────┐
-│  AI WORKER  —  Python, offline batch, run manually             │
+│  AI WORKER  —  Python, batch                                   │
+│  spawned by the backend as a local child process               │
+│  (AI_WORKER_AUTORUN=false during demos: a run takes hours)     │
 │  YOLOv8 · ByteTrack · SigLIP · PnLCalib · OpenCV               │
 │  input:  match video (.mp4)                                    │
 │  output: outputs/<run_id>/  →  match_report_merged.json,       │
@@ -109,6 +111,7 @@ combined into one person's stats.
 | **AI output** | `GET /matches/:id/report` · `GET /matches/:id/video/stats` · `GET /matches/:id/video/spatial` · `GET /matches/:id/crops/*` · `GET /matches/:id/player-stats` |
 | Identity mapping | `GET/POST /matches/:id/track-maps` |
 | Upload | `POST /matches/:id/video` |
+| **Run the AI worker** | `POST /matches/:id/process` · `GET /matches/ai-worker/status` |
 | Health | `GET /health` |
 
 ### AI worker — `EZ Stats AI Worker`
@@ -249,6 +252,34 @@ player could not be distinguished from one at his feet. Same system, same switch
 | Run outputs | Local `outputs/<run_id>/`, mirrored to Drive |
 
 No cloud hosting. No CI/CD. No queue.
+
+### How the backend starts the worker
+
+`AiWorkerService` (`src/matches/ai-worker.service.ts`) spawns the worker with
+`child_process.spawn`, deliberately as a separate process rather than an import,
+so the worker's ML dependencies never enter the backend's dependency tree:
+
+```
+python run_pipeline_v2.py --video <uploaded video>
+```
+
+It reads the runner's `Run dir:` line to learn the output folder, stores
+`reportPath` on the match, and moves it through the `MatchStatus` values that
+were already defined for this purpose: `QUEUED → PROCESSING → COMPLETED` (or
+`FAILED`). Spawning returns immediately rather than blocking the HTTP request,
+because a match video can be hours long.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `AI_WORKER_AUTORUN` | **`false`** | Whether an upload starts processing automatically |
+| `AI_WORKER_DIR` | `../Desktop/EZ Stats AI Worker` | Where the worker repository lives |
+| `AI_WORKER_PYTHON` | `python` | Interpreter holding the worker's dependencies |
+
+**Autorun is off for demonstrations.** A full run takes from several minutes to
+a few hours depending on clip length and whether a GPU is available, so a live
+presentation uses **pre-computed runs** from `demo/` instead of waiting. The flag
+only decides whether *upload* triggers processing — the identical code path runs
+either way through `POST /matches/:id/process`, so this is a switch, not a stub.
 
 ---
 
